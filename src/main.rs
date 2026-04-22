@@ -152,23 +152,28 @@ impl HttpHandler for TrafficHandler {
                 };
 
                 /* GM_ indicates Greasemonkey API usage requiring polyfill */
-                if script_content.contains("GM_") {
+                let inject = if script_content.contains("GM_") {
                     let gm_polyfill = include_str!("../lib/gm_polyfill.js");
-                    let inject = format!(
+                    format!(
                         "<script>{}</script><script>{}</script>",
                         gm_polyfill, script_content
-                    );
-                    // Try </body> first, fallback to </html>, then append at end
-                    if html.contains("</body>") {
-                        html = html.replace("</body>", &format!("{}{}", inject, "</body>"));
-                    } else if html.contains("</html>") {
-                        html = html.replace("</html>", &format!("{}{}", inject, "</html>"));
-                    } else {
-                        warn!("Neither </body> nor </html> found, appending script at end");
-                        html.push_str(&inject);
-                    }
+                    )
+                } else {
+                    format!("<script>{}</script>", script_content)
+                };
 
-                    /* Greasemonkey APIs could need external connectivity, bypass CSP restrictions */
+                // Try </body> first, fallback to </html>, then append at end
+                if html.contains("</body>") {
+                    html = html.replace("</body>", &format!("{}{}", inject, "</body>"));
+                } else if html.contains("</html>") {
+                    html = html.replace("</html>", &format!("{}{}", inject, "</html>"));
+                } else {
+                    warn!("Neither </body> nor </html> found, appending script at end");
+                    html.push_str(&inject);
+                }
+
+                /* Greasemonkey APIs could need external connectivity, bypass CSP restrictions */
+                if script_content.contains("GM_") {
                     if let Some(csp) = parts.headers.get("content-security-policy") {
                         let csp_str = csp.to_str().unwrap_or("");
                         // Remove CSP if it contains nonces (e.g., Instagram) since we can't match them
@@ -189,17 +194,6 @@ impl HttpHandler for TrafficHandler {
                                     parts.headers.remove("content-security-policy");
                                 }
                             }
-                        }
-                    } else {
-                        let inject = format!("<script>{}</script>", script_content);
-                        // Try </body> first, fallback to </html>, then append at end
-                        if html.contains("</body>") {
-                            html = html.replace("</body>", &format!("{}{}", inject, "</body>"));
-                        } else if html.contains("</html>") {
-                            html = html.replace("</html>", &format!("{}{}", inject, "</html>"));
-                        } else {
-                            warn!("Neither </body> nor </html> found, appending script at end");
-                            html.push_str(&inject);
                         }
                     }
                 }
