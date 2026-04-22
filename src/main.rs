@@ -163,17 +163,23 @@ impl HttpHandler for TrafficHandler {
                     /* Greasemonkey APIs could need external connectivity, bypass CSP restrictions */
                     if let Some(csp) = parts.headers.get("content-security-policy") {
                         let csp_str = csp.to_str().unwrap_or("");
-                        let new_csp = csp_str.replace("connect-src 'self'", "connect-src *");
-                        match new_csp.parse() {
-                            Ok(header_value) => {
-                                parts
-                                    .headers
-                                    .insert("content-security-policy", header_value);
-                            }
-                            Err(e) => {
-                                warn!("Failed to update CSP header: {}", e);
-                                // Remove the restrictive CSP rather than setting an invalid one
-                                parts.headers.remove("content-security-policy");
+                        // Remove CSP if it contains nonces (e.g., Instagram) since we can't match them
+                        if csp_str.contains("'nonce-") {
+                            warn!("Removing CSP header with nonces to allow script injection");
+                            parts.headers.remove("content-security-policy");
+                        } else {
+                            let new_csp = csp_str.replace("connect-src 'self'", "connect-src *");
+                            match new_csp.parse() {
+                                Ok(header_value) => {
+                                    parts
+                                        .headers
+                                        .insert("content-security-policy", header_value);
+                                }
+                                Err(e) => {
+                                    warn!("Failed to update CSP header: {}", e);
+                                    // Remove the restrictive CSP rather than setting an invalid one
+                                    parts.headers.remove("content-security-policy");
+                                }
                             }
                         }
                     } else {
