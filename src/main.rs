@@ -158,7 +158,15 @@ impl HttpHandler for TrafficHandler {
                         "<script>{}</script><script>{}</script>",
                         gm_polyfill, script_content
                     );
-                    html = html.replace("</body>", &format!("{}{}", inject, "</body>"));
+                    // Try </body> first, fallback to </html>, then append at end
+                    if html.contains("</body>") {
+                        html = html.replace("</body>", &format!("{}{}", inject, "</body>"));
+                    } else if html.contains("</html>") {
+                        html = html.replace("</html>", &format!("{}{}", inject, "</html>"));
+                    } else {
+                        warn!("Neither </body> nor </html> found, appending script at end");
+                        html.push_str(&inject);
+                    }
 
                     /* Greasemonkey APIs could need external connectivity, bypass CSP restrictions */
                     if let Some(csp) = parts.headers.get("content-security-policy") {
@@ -184,7 +192,15 @@ impl HttpHandler for TrafficHandler {
                         }
                     } else {
                         let inject = format!("<script>{}</script>", script_content);
-                        html = html.replace("</body>", &format!("{}{}", inject, "</body>"));
+                        // Try </body> first, fallback to </html>, then append at end
+                        if html.contains("</body>") {
+                            html = html.replace("</body>", &format!("{}{}", inject, "</body>"));
+                        } else if html.contains("</html>") {
+                            html = html.replace("</html>", &format!("{}{}", inject, "</html>"));
+                        } else {
+                            warn!("Neither </body> nor </html> found, appending script at end");
+                            html.push_str(&inject);
+                        }
                     }
                 }
             }
