@@ -37,8 +37,10 @@ use hudsucker::{
 };
 use std::net::SocketAddr;
 use tracing::*;
+use tracing_appender;
 
 mod config;
+mod logging;
 mod scripts;
 
 #[derive(Clone)]
@@ -53,6 +55,8 @@ impl HttpHandler for TrafficHandler {
         req: Request<Body>,
     ) -> RequestOrResponse {
         let host = req.uri().host().unwrap_or("unknown").to_string();
+
+        logging::log_request(req.method(), req.uri(), req.headers(), &host);
 
         self.current_domain = Some(host);
         req.into()
@@ -214,7 +218,7 @@ impl HttpHandler for TrafficHandler {
 
 impl WebSocketHandler for TrafficHandler {
     async fn handle_message(&mut self, _ctx: &WebSocketContext, msg: Message) -> Option<Message> {
-        info!("WebSocket message: {:?}", msg);
+        //info!("WebSocket message: {:?}", msg);
         Some(msg)
     }
 }
@@ -227,7 +231,13 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    // Configure file-based logging
+    let file_appender = tracing_appender::rolling::never("logs", "dope.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    
+    tracing_subscriber::fmt()
+        .with_writer(non_blocking)
+        .init();
 
     let ca_key_path = "ca/ca.key";
     let ca_cert_path = "ca/ca.cer";
