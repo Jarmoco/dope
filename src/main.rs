@@ -29,7 +29,7 @@ use hudsucker::{
     Body, HttpContext,
     certificate_authority::RcgenAuthority,
     futures::TryStreamExt,
-    hyper::{Request, Response, header},
+    hyper::{Request, Response, StatusCode, header},
     rcgen::{Issuer, KeyPair},
     rustls::crypto::aws_lc_rs,
     tokio_tungstenite::tungstenite::Message,
@@ -73,6 +73,7 @@ impl HttpHandler for TrafficHandler {
             .is_some_and(|v| v.to_str().unwrap_or("").contains("text/html"));
 
         if !is_html {
+            logging::log_response(res.status(), res.headers(), "");
             return res;
         }
 
@@ -208,7 +209,20 @@ impl HttpHandler for TrafficHandler {
         parts.headers.remove(header::CONTENT_ENCODING);
         parts.headers.remove(header::CONTENT_LENGTH);
 
-        Response::from_parts(parts, Body::from(html))
+        let response = Response::from_parts(parts, Body::from(html.clone()));
+
+        logging::log_response(response.status(), response.headers(), &html);
+
+        response
+    }
+
+    async fn handle_error(&mut self, ctx: &HttpContext, err: hyper_util::client::legacy::Error) -> Response<Body> {
+        error!("Proxy error: {}", err);
+        logging::log_proxy_error(ctx, &err);
+        Response::builder()
+            .status(StatusCode::BAD_GATEWAY)
+            .body(Body::empty())
+            .expect("Failed to build response")
     }
 }
 
