@@ -16,7 +16,7 @@
  * Design Choices:
  * - Stream-based decompression: Memory efficient for large responses
  * - Early returns: Keep main logic at lowest indentation level
- * - Clone domain: Needed for use across multiple await points
+ * - Pending URL map: Correlates requests to responses via client_addr
  */
 
 use http_body_util::BodyDataStream;
@@ -35,7 +35,9 @@ use hudsucker::{
     tokio_tungstenite::tungstenite::Message,
     *,
 };
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 use tracing::*;
 use tracing_appender;
 
@@ -45,20 +47,21 @@ mod scripts;
 
 #[derive(Clone)]
 struct TrafficHandler {
-    current_domain: Option<String>,
+    pending_urls: Arc<Mutex<HashMap<SocketAddr, String>>>,
 }
 
 impl HttpHandler for TrafficHandler {
     async fn handle_request(
         &mut self,
-        _ctx: &HttpContext,
+        ctx: &HttpContext,
         req: Request<Body>,
     ) -> RequestOrResponse {
         let host = req.uri().host().unwrap_or("unknown").to_string();
+        let full_uri = req.uri().to_string();
 
         logging::log_request(req.method(), req.uri(), req.headers(), &host);
 
-        self.current_domain = Some(host);
+        self.pending_urls.lock().unwrap().insert(ctx.client_addr, full_uri);
         req.into()
     }
 
@@ -66,7 +69,7 @@ impl HttpHandler for TrafficHandler {
      * HTTP Response Processing & Script Injection
      * -------------------------------------------------------------------------- */
 
-    async fn handle_response(&mut self, _ctx: &HttpContext, res: Response<Body>) -> Response<Body> {
+    async fn handle_response(&mut self, ctx: &HttpContext, res: Response<Body>) -> Response<Body> {
         let is_html = res
             .headers()
             .get(header::CONTENT_TYPE)
@@ -96,28 +99,24 @@ impl HttpHandler for TrafficHandler {
                 let mut decoder = GzipDecoder::new(reader);
                 if let Err(e) = decoder.read_to_end(&mut decoded_bytes).await {
                     error!("Gzip decompression failed: {}", e);
-                    return Response::from_parts(parts, Body::from(String::new()));
                 }
             }
             "br" => {
                 let mut decoder = BrotliDecoder::new(reader);
                 if let Err(e) = decoder.read_to_end(&mut decoded_bytes).await {
                     error!("Brotli decompression failed: {}", e);
-                    return Response::from_parts(parts, Body::from(String::new()));
                 }
             }
             "deflate" => {
                 let mut decoder = ZlibDecoder::new(reader);
                 if let Err(e) = decoder.read_to_end(&mut decoded_bytes).await {
                     error!("Zlib decompression failed: {}", e);
-                    return Response::from_parts(parts, Body::from(String::new()));
                 }
             }
             "zstd" => {
                 let mut decoder = ZstdDecoder::new(reader);
                 if let Err(e) = decoder.read_to_end(&mut decoded_bytes).await {
                     error!("Zstd decompression failed: {}", e);
-                    return Response::from_parts(parts, Body::from(String::new()));
                 }
             }
             _ => {
@@ -127,7 +126,6 @@ impl HttpHandler for TrafficHandler {
                 let mut r = reader;
                 if let Err(e) = r.read_to_end(&mut decoded_bytes).await {
                     error!("Body read failed: {}", e);
-                    return Response::from_parts(parts, Body::from(String::new()));
                 }
             }
         }
@@ -138,12 +136,19 @@ impl HttpHandler for TrafficHandler {
          * Script Injection Logic
          * -------------------------------------------------------------------------- */
         /* Inject scripts at the end of body to ensure DOM is ready */
+        let full_url = self.pending_urls.lock().unwrap().remove(&ctx.client_addr).unwrap_or_default();
+        let domain = full_url
+            .strip_prefix("https://")
+            .or_else(|| full_url.strip_prefix("http://"))
+            .and_then(|rest| rest.split('/').next())
+            .unwrap_or(&full_url)
+            .to_string();
+
         let config = config::load_config();
         let websites_with_rules = config.get_websites();
 
-        if let Some(domain) = &self.current_domain
-            && websites_with_rules.contains(domain)
-            && let Some(scripts) = config.get_scripts_for_website(domain)
+        if websites_with_rules.contains(&domain)
+            && let Some(scripts) = config.get_scripts_for_website(&domain)
         {
             for script in scripts {
                 info!("Injecting script: {} into {}", script, domain);
@@ -152,7 +157,7 @@ impl HttpHandler for TrafficHandler {
                     Ok(c) => c,
                     Err(e) => {
                         error!("{}", e);
-                        return Response::from_parts(parts, Body::from(html));
+                        continue;
                     }
                 };
 
@@ -300,7 +305,7 @@ async fn main() {
      * Proxy Configuration & Startup
      * -------------------------------------------------------------------------- */
     let traffic_handler = TrafficHandler {
-        current_domain: None,
+        pending_urls: Arc::new(Mutex::new(HashMap::new())),
     };
 
     let config = config::load_config();
