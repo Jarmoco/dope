@@ -20,6 +20,7 @@ pub struct Config {
 #[derive(Serialize, Deserialize)]
 pub struct ServerConfig {
     pub port: u16,
+    pub pause: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -95,6 +96,7 @@ pub fn create_default_config() -> Result<(), Box<dyn std::error::Error>> {
 
 [server]
 port = 8080
+# pause = true        # stop all injection and manipulation (default: false)
 
 
 # -----------------------------------------------------------------------------
@@ -184,7 +186,7 @@ pub fn load_config() -> Config {
     {
         error!("Failed to create default config: {}", e);
         return Config {
-            server: ServerConfig { port: 8080 },
+            server: ServerConfig { port: 8080, pause: None },
             scripts: None,
             modify_response: None,
             modify_request: None,
@@ -196,7 +198,7 @@ pub fn load_config() -> Config {
         Err(e) => {
             error!("Failed to read config.toml: {}", e);
             return Config {
-                server: ServerConfig { port: 8080 },
+                server: ServerConfig { port: 8080, pause: None },
                 scripts: None,
                 modify_response: None,
                 modify_request: None,
@@ -209,7 +211,7 @@ pub fn load_config() -> Config {
         Err(e) => {
             error!("Failed to parse config.toml: {}", e);
             Config {
-                server: ServerConfig { port: 8080 },
+                server: ServerConfig { port: 8080, pause: None },
                 scripts: None,
                 modify_response: None,
                 modify_request: None,

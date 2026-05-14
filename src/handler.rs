@@ -193,11 +193,15 @@ impl HttpHandler for TrafficHandler {
         if !domain.is_empty() {
             let cfg = config::load_config();
 
-            if let Some(response_modifier) = cfg.get_response_modifiers(&domain) {
-                modify::apply_response_modifiers(&mut parts.headers, response_modifier);
-            }
+            if cfg.server.pause.unwrap_or(false) {
+                info!("Paused — skipping injection and manipulation for {}", domain);
+            } else {
+                if let Some(response_modifier) = cfg.get_response_modifiers(&domain) {
+                    modify::apply_response_modifiers(&mut parts.headers, response_modifier);
+                }
 
-            inject::inject_scripts(&mut html, &domain, &cfg);
+                inject::inject_scripts(&mut html, &domain, &cfg);
+            }
         }
 
         /* --- Finalize ------------------------------------------------------ */
