@@ -6,7 +6,7 @@
 use axum::{
     extract::Query,
     http::StatusCode,
-    response::Html,
+    response::{Html, IntoResponse},
     routing::{get},
     Json, Router,
 };
@@ -27,6 +27,11 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(serve_index))
+        .route("/static/style.css", get(serve_style))
+        .route("/static/templates.js", get(serve_templates))
+        .route("/static/app.js", get(serve_app))
+        .route("/static/logs.js", get(serve_logs))
+        .route("/static/config.js", get(serve_config))
         .route("/api/config", get(get_config).put(update_config))
         .route("/api/logs", get(get_logs));
 
@@ -46,6 +51,41 @@ async fn main() {
 
 async fn serve_index() -> Html<&'static str> {
     Html(include_str!("../static/index.html"))
+}
+
+async fn serve_style() -> impl IntoResponse {
+    (
+        [("content-type", "text/css")],
+        include_str!("../static/style.css"),
+    )
+}
+
+async fn serve_templates() -> impl IntoResponse {
+    (
+        [("content-type", "application/javascript")],
+        include_str!("../static/templates.js"),
+    )
+}
+
+async fn serve_app() -> impl IntoResponse {
+    (
+        [("content-type", "application/javascript")],
+        include_str!("../static/app.js"),
+    )
+}
+
+async fn serve_logs() -> impl IntoResponse {
+    (
+        [("content-type", "application/javascript")],
+        include_str!("../static/logs.js"),
+    )
+}
+
+async fn serve_config() -> impl IntoResponse {
+    (
+        [("content-type", "application/javascript")],
+        include_str!("../static/config.js"),
+    )
 }
 
 /* --- Config Handlers ------------------------------------------------------- */
