@@ -1,246 +1,29 @@
 /* -----------------------------------------------------------------------------
- * MITM Proxy with Userscript Injection
- * -----------------------------------------------------------------------------
- *
- * This module implements a man-in-the-middle HTTP/HTTPS proxy that intercepts
- * and modifies HTML responses to inject userscripts in the ViolentMonkey /
- * GreaseMonkey format
- *
- * Architecture:
- * - TrafficHandler: Core HTTP request/response interceptor
- * - Decompression: Handles gzip, brotli, deflate, and zstd encodings transparently
- * - Script Injection: Reads userscripts from filesystem and injects them into HTML
- * - GM Polyfill: Automatically injects greasemonkey API polyfill when needed
- * - CSP Modification: Removes restrictive CSP headers to allow script execution
- *
- * Design Choices:
- * - Stream-based decompression: Memory efficient for large responses
- * - Early returns: Keep main logic at lowest indentation level
- * - Pending URL map: Correlates requests to responses via client_addr
- */
-
-use http_body_util::BodyDataStream;
-
-use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZlibDecoder, ZstdDecoder};
-use tokio::io::AsyncReadExt;
-use tokio_util::io::StreamReader;
-
-use hudsucker::{
-    Body, HttpContext,
-    certificate_authority::RcgenAuthority,
-    futures::TryStreamExt,
-    hyper::{Request, Response, StatusCode, header},
-    rcgen::{Issuer, KeyPair},
-    rustls::crypto::aws_lc_rs,
-    tokio_tungstenite::tungstenite::Message,
-    *,
-};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use tracing::*;
-use tracing_appender;
-
-mod config;
-mod logging;
-mod scripts;
-
-#[derive(Clone)]
-struct TrafficHandler {
-    pending_urls: Arc<Mutex<HashMap<SocketAddr, String>>>,
-}
-
-impl HttpHandler for TrafficHandler {
-    async fn handle_request(
-        &mut self,
-        ctx: &HttpContext,
-        req: Request<Body>,
-    ) -> RequestOrResponse {
-        let host = req.uri().host().unwrap_or("unknown").to_string();
-        let full_uri = req.uri().to_string();
-
-        logging::log_request(req.method(), req.uri(), req.headers(), &host);
-
-        self.pending_urls.lock().unwrap().insert(ctx.client_addr, full_uri);
-        req.into()
-    }
-
-    /* -----------------------------------------------------------------------------
-     * HTTP Response Processing & Script Injection
-     * -------------------------------------------------------------------------- */
-
-    async fn handle_response(&mut self, ctx: &HttpContext, res: Response<Body>) -> Response<Body> {
-        let is_html = res
-            .headers()
-            .get(header::CONTENT_TYPE)
-            .is_some_and(|v| v.to_str().unwrap_or("").contains("text/html"));
-
-        if !is_html {
-            logging::log_response(res.status(), res.headers(), "");
-            return res;
-        }
-
-        let (mut parts, body) = res.into_parts();
-
-        let stream = BodyDataStream::new(body).map_err(std::io::Error::other);
-        let reader = StreamReader::new(stream);
-
-        let mut decoded_bytes = Vec::new();
-
-        let encoding = parts
-            .headers
-            .get(header::CONTENT_ENCODING)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-
-        /* Decompress before injection to get readable HTML */
-        match encoding {
-            "gzip" => {
-                let mut decoder = GzipDecoder::new(reader);
-                if let Err(e) = decoder.read_to_end(&mut decoded_bytes).await {
-                    error!("Gzip decompression failed: {}", e);
-                }
-            }
-            "br" => {
-                let mut decoder = BrotliDecoder::new(reader);
-                if let Err(e) = decoder.read_to_end(&mut decoded_bytes).await {
-                    error!("Brotli decompression failed: {}", e);
-                }
-            }
-            "deflate" => {
-                let mut decoder = ZlibDecoder::new(reader);
-                if let Err(e) = decoder.read_to_end(&mut decoded_bytes).await {
-                    error!("Zlib decompression failed: {}", e);
-                }
-            }
-            "zstd" => {
-                let mut decoder = ZstdDecoder::new(reader);
-                if let Err(e) = decoder.read_to_end(&mut decoded_bytes).await {
-                    error!("Zstd decompression failed: {}", e);
-                }
-            }
-            _ => {
-                if !encoding.is_empty() {
-                    warn!("Unsupported encoding: {}", encoding);
-                }
-                let mut r = reader;
-                if let Err(e) = r.read_to_end(&mut decoded_bytes).await {
-                    error!("Body read failed: {}", e);
-                }
-            }
-        }
-
-        let mut html = String::from_utf8_lossy(&decoded_bytes).into_owned();
-
-        /* -----------------------------------------------------------------------------
-         * Script Injection Logic
-         * -------------------------------------------------------------------------- */
-        /* Inject scripts at the end of body to ensure DOM is ready */
-        let full_url = self.pending_urls.lock().unwrap().remove(&ctx.client_addr).unwrap_or_default();
-        let domain = full_url
-            .strip_prefix("https://")
-            .or_else(|| full_url.strip_prefix("http://"))
-            .and_then(|rest| rest.split('/').next())
-            .unwrap_or(&full_url)
-            .to_string();
-
-        let config = config::load_config();
-        let websites_with_rules = config.get_websites();
-
-        if websites_with_rules.contains(&domain)
-            && let Some(scripts) = config.get_scripts_for_website(&domain)
-        {
-            for script in scripts {
-                info!("Injecting script: {} into {}", script, domain);
-
-                let script_content = match scripts::read_script(&script) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        error!("{}", e);
-                        continue;
-                    }
-                };
-
-                /* GM_ indicates Greasemonkey API usage requiring polyfill */
-                let inject = if script_content.contains("GM_") {
-                    let gm_polyfill = include_str!("../lib/gm_polyfill.js");
-                    format!(
-                        "<script>{}</script><script>{}</script>",
-                        gm_polyfill, script_content
-                    )
-                } else {
-                    format!("<script>{}</script>", script_content)
-                };
-
-                // Try </body> first, fallback to </html>, then append at end
-                if html.contains("</body>") {
-                    html = html.replace("</body>", &format!("{}{}", inject, "</body>"));
-                } else if html.contains("</html>") {
-                    html = html.replace("</html>", &format!("{}{}", inject, "</html>"));
-                } else {
-                    warn!("Neither </body> nor </html> found, appending script at end");
-                    html.push_str(&inject);
-                }
-
-                /* Greasemonkey APIs could need external connectivity, bypass CSP restrictions */
-                if script_content.contains("GM_") {
-                    if let Some(csp) = parts.headers.get("content-security-policy") {
-                        let csp_str = csp.to_str().unwrap_or("");
-                        // Remove CSP if it contains nonces (e.g., Instagram) since we can't match them
-                        if csp_str.contains("'nonce-") {
-                            warn!("Removing CSP header with nonces to allow script injection");
-                            parts.headers.remove("content-security-policy");
-                        } else {
-                            let new_csp = csp_str.replace("connect-src 'self'", "connect-src *");
-                            match new_csp.parse() {
-                                Ok(header_value) => {
-                                    parts
-                                        .headers
-                                        .insert("content-security-policy", header_value);
-                                }
-                                Err(e) => {
-                                    warn!("Failed to update CSP header: {}", e);
-                                    // Remove the restrictive CSP rather than setting an invalid one
-                                    parts.headers.remove("content-security-policy");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        /* Remove encoding/length headers since body changed from compressed to plain */
-        parts.headers.remove(header::CONTENT_ENCODING);
-        parts.headers.remove(header::CONTENT_LENGTH);
-
-        let response = Response::from_parts(parts, Body::from(html.clone()));
-
-        logging::log_response(response.status(), response.headers(), &html);
-
-        response
-    }
-
-    async fn handle_error(&mut self, ctx: &HttpContext, err: hyper_util::client::legacy::Error) -> Response<Body> {
-        error!("Proxy error: {}", err);
-        logging::log_proxy_error(ctx, &err);
-        Response::builder()
-            .status(StatusCode::BAD_GATEWAY)
-            .body(Body::empty())
-            .expect("Failed to build response")
-    }
-}
-
-/* -----------------------------------------------------------------------------
- * WebSocket Message Handling: No operations are done here.
+ * main.rs
+ * MITM proxy entry point — loads the CA certificate, reads config, and starts
+ * the proxy on the configured port.
  * -------------------------------------------------------------------------- */
 
-impl WebSocketHandler for TrafficHandler {
-    async fn handle_message(&mut self, _ctx: &WebSocketContext, msg: Message) -> Option<Message> {
-        //info!("WebSocket message: {:?}", msg);
-        Some(msg)
-    }
-}
+use hudsucker::{
+    certificate_authority::RcgenAuthority,
+    rcgen::{Issuer, KeyPair},
+    rustls::crypto::aws_lc_rs,
+    Proxy,
+};
+use std::io::IsTerminal;
+use std::net::SocketAddr;
+use tracing::*;
+use tracing_appender;
+use tracing_subscriber::prelude::*;
+
+mod config;
+mod handler;
+mod inject;
+mod logging;
+mod modify;
+mod scripts;
+
+/* --- Shutdown -------------------------------------------------------------- */
 
 async fn shutdown_signal() {
     tokio::signal::ctrl_c()
@@ -248,15 +31,28 @@ async fn shutdown_signal() {
         .expect("Failed to install CTRL+C signal handler");
 }
 
+/* --- Main ------------------------------------------------------------------ */
+
 #[tokio::main]
 async fn main() {
-    // Configure file-based logging
     let file_appender = tracing_appender::rolling::never("logs", "dope.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    
-    tracing_subscriber::fmt()
+
+    let file_layer = tracing_subscriber::fmt::layer()
         .with_writer(non_blocking)
-        .init();
+        .with_ansi(false);
+
+    let subscriber = tracing_subscriber::registry().with(file_layer);
+
+    if std::io::stdout().is_terminal() {
+        let stdout_layer = tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stdout)
+            .with_ansi(true);
+
+        subscriber.with(stdout_layer).init();
+    } else {
+        subscriber.init();
+    }
 
     let ca_key_path = "ca/ca.key";
     let ca_cert_path = "ca/ca.cer";
@@ -265,8 +61,7 @@ async fn main() {
         Ok(content) => content,
         Err(e) => {
             error!("Failed to read {}: {}", ca_key_path, e);
-            error!("Please generate the certificate files with:");
-            error!("openssl req -x509 -newkey rsa:4096 -keyout ca/ca.key -out ca/ca.cer -days 365 -nodes");
+            error!("Generate with: openssl req -x509 -newkey rsa:4096 -keyout ca/ca.key -out ca/ca.cer -days 365 -nodes");
             error!("Then add ca/ca.cer to your browser's trusted certificates.");
             return;
         }
@@ -276,8 +71,7 @@ async fn main() {
         Ok(content) => content,
         Err(e) => {
             error!("Failed to read {}: {}", ca_cert_path, e);
-            error!("Please generate the certificate files with:");
-            error!("openssl req -x509 -newkey rsa:4096 -keyout ca/ca.key -out ca/ca.cer -days 365 -nodes");
+            error!("Generate with: openssl req -x509 -newkey rsa:4096 -keyout ca/ca.key -out ca/ca.cer -days 365 -nodes");
             error!("Then add ca/ca.cer to your browser's trusted certificates.");
             return;
         }
@@ -301,15 +95,10 @@ async fn main() {
 
     let ca = RcgenAuthority::new(issuer, 1_000, aws_lc_rs::default_provider());
 
-    /* -----------------------------------------------------------------------------
-     * Proxy Configuration & Startup
-     * -------------------------------------------------------------------------- */
-    let traffic_handler = TrafficHandler {
-        pending_urls: Arc::new(Mutex::new(HashMap::new())),
-    };
+    let traffic_handler = handler::TrafficHandler::new();
 
-    let config = config::load_config();
-    let port = config.server.port;
+    let cfg = config::load_config();
+    let port = cfg.server.port;
 
     let proxy = Proxy::builder()
         .with_addr(SocketAddr::from(([127, 0, 0, 1], port)))

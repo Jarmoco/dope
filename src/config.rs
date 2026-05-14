@@ -1,25 +1,21 @@
 /* -----------------------------------------------------------------------------
- * Configuration Management
- * -----------------------------------------------------------------------------
- *
- * This module handles runtime configuration for userscript injection rules.
- * Configuration is stored in TOML format and includes server ports and
- * website-to-script mappings.
- *
- * Architecture:
- * - Config: Root structure combining server and userscript settings
- * - ServerConfig: Network port configuration for different proxy services
- * - UserscriptRule: Maps a website domain to a list of userscript files
- *
- * Design Choices:
- * - TOML format: Human-readable and easy to edit manually
- * - Default creation: Auto-generates config on first run to simplify setup
- * - Vector rules: Maintains insertion order for predictable script injection
- * - Clone-based retrieval: API returns owned values for simplicity
- */
+ * config.rs
+ * Configuration types and TOML loading for domains, scripts, and modifiers.
+ * -------------------------------------------------------------------------- */
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tracing::*;
+
+/* --- Types ----------------------------------------------------------------- */
+
+#[derive(Serialize, Deserialize)]
+pub struct Config {
+    pub server: ServerConfig,
+    pub scripts: Option<Vec<ScriptRule>>,
+    pub modify_response: Option<Vec<ResponseModifier>>,
+    pub modify_request: Option<Vec<RequestModifier>>,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct ServerConfig {
@@ -27,62 +23,68 @@ pub struct ServerConfig {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct UserscriptRule {
-    pub website: String,
+pub struct ScriptRule {
+    pub domain: String,
     pub scripts: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct UserscriptsConfig {
-    pub rule: Vec<UserscriptRule>,
+#[derive(Serialize, Deserialize, Default)]
+pub struct ResponseModifier {
+    pub domain: String,
+    pub csp: Option<String>,
+    pub remove_headers: Option<Vec<String>>,
+    pub add_headers: Option<HashMap<String, String>>,
+    pub inject_at: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Config {
-    pub server: ServerConfig,
-    pub userscripts: UserscriptsConfig,
+#[derive(Serialize, Deserialize, Default)]
+pub struct RequestModifier {
+    pub domain: String,
+    pub remove_headers: Option<Vec<String>>,
+    pub add_headers: Option<HashMap<String, String>>,
 }
+
+/* --- Lookups --------------------------------------------------------------- */
 
 impl Config {
-    pub fn get_websites(&self) -> Vec<String> {
-        self.userscripts
-            .rule
-            .iter()
-            .map(|rule| rule.website.clone())
-            .collect()
-    }
-
-    pub fn get_scripts_for_website(&self, website: &str) -> Option<Vec<String>> {
-        for rule in &self.userscripts.rule {
-            if rule.website == website {
-                return Some(rule.scripts.clone());
+    pub fn get_scripts_for_domain(&self, domain: &str) -> Vec<String> {
+        let mut result = Vec::new();
+        if let Some(scripts) = &self.scripts {
+            for rule in scripts {
+                if rule.domain == domain {
+                    result.extend(rule.scripts.clone());
+                }
             }
         }
-        None
+        result
+    }
+
+    pub fn get_response_modifiers(&self, domain: &str) -> Option<&ResponseModifier> {
+        self.modify_response
+            .as_ref()?
+            .iter()
+            .find(|m| m.domain == domain)
+    }
+
+    pub fn get_request_modifiers(&self, domain: &str) -> Option<&RequestModifier> {
+        self.modify_request
+            .as_ref()?
+            .iter()
+            .find(|m| m.domain == domain)
     }
 }
 
-/* -----------------------------------------------------------------------------
- * Default Configuration Creation
- * -------------------------------------------------------------------------- */
-/* Why: Auto-generate config on first run to reduce setup friction */
+/* --- Default Config -------------------------------------------------------- */
+
 pub fn create_default_config() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config {
-        server: ServerConfig {
-            port: 8080,
-        },
-        userscripts: UserscriptsConfig {
-            rule: vec![
-                UserscriptRule {
-                    website: "www.google.com".to_string(),
-                    scripts: vec!["example".to_string()],
-                },
-                UserscriptRule {
-                    website: "www.youtube.com".to_string(),
-                    scripts: vec!["example".to_string()],
-                },
-            ],
-        },
+        server: ServerConfig { port: 8080 },
+        scripts: Some(vec![ScriptRule {
+            domain: "www.google.com".to_string(),
+            scripts: vec!["example".to_string()],
+        }]),
+        modify_response: None,
+        modify_request: None,
     };
 
     let toml = toml::to_string(&config)?;
@@ -91,21 +93,18 @@ pub fn create_default_config() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/* -----------------------------------------------------------------------------
- * Configuration Loading
- * -------------------------------------------------------------------------- */
-/* Why: Create default config if missing, then parse and return */
+/* --- Load ------------------------------------------------------------------ */
+
 pub fn load_config() -> Config {
     if !std::path::Path::new("config.toml").exists()
         && let Err(e) = create_default_config()
     {
         error!("Failed to create default config: {}", e);
-        // Return a minimal config to allow the application to continue
         return Config {
-            server: ServerConfig {
-                port: 8080,
-            },
-            userscripts: UserscriptsConfig { rule: vec![] },
+            server: ServerConfig { port: 8080 },
+            scripts: None,
+            modify_response: None,
+            modify_request: None,
         };
     }
 
@@ -113,12 +112,11 @@ pub fn load_config() -> Config {
         Ok(c) => c,
         Err(e) => {
             error!("Failed to read config.toml: {}", e);
-            // Return a minimal config to allow the application to continue
             return Config {
-                server: ServerConfig {
-                    port: 8080,
-                },
-                userscripts: UserscriptsConfig { rule: vec![] },
+                server: ServerConfig { port: 8080 },
+                scripts: None,
+                modify_response: None,
+                modify_request: None,
             };
         }
     };
@@ -127,12 +125,11 @@ pub fn load_config() -> Config {
         Ok(config) => config,
         Err(e) => {
             error!("Failed to parse config.toml: {}", e);
-            // Return a minimal config to allow the application to continue
             Config {
-                server: ServerConfig {
-                    port: 8080,
-                },
-                userscripts: UserscriptsConfig { rule: vec![] },
+                server: ServerConfig { port: 8080 },
+                scripts: None,
+                modify_response: None,
+                modify_request: None,
             }
         }
     }

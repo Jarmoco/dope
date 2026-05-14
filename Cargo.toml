@@ -14,7 +14,7 @@ tokio-util = {version = "0.7.18", features = ["io", "io-util"]}
 toml = "1.0.6"
 tracing = "0.1.44"
 tracing-appender = "0.2.3"
-tracing-subscriber = {version = "0.3.22", features = ["fmt"]}
+tracing-subscriber = {version = "0.3.22", features = ["fmt", "registry"]}
 
 [profile.release]
 opt-level = "z"     
