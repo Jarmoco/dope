@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["dope-core", "dope"]
+members = ["dope-core", "dope", "dope-panel"]
 
 [profile.release]
 opt-level = "z"

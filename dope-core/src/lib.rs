@@ -41,6 +41,57 @@ pub enum LogEntry {
     },
 }
 
+/* --- Log Helpers ----------------------------------------------------------- */
+
+impl LogEntry {
+    pub fn ts(&self) -> u64 {
+        match self {
+            LogEntry::Request { ts, .. }
+            | LogEntry::Response { ts, .. }
+            | LogEntry::Error { ts, .. } => *ts,
+        }
+    }
+
+    pub fn req_id(&self) -> &str {
+        match self {
+            LogEntry::Request { req_id, .. }
+            | LogEntry::Response { req_id, .. }
+            | LogEntry::Error { req_id, .. } => req_id,
+        }
+    }
+}
+
+pub fn read_log_entries(since: u64, limit: usize) -> Vec<LogEntry> {
+    let path = trace_path();
+    if !path.exists() {
+        return vec![];
+    }
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+
+    let entries: Vec<LogEntry> = content
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .filter(|e: &LogEntry| e.ts() >= since)
+        .collect();
+
+    let start = entries.len().saturating_sub(limit);
+    entries[start..].to_vec()
+}
+
+pub fn log_entry_count() -> usize {
+    let path = trace_path();
+    if !path.exists() {
+        return 0;
+    }
+    std::fs::read_to_string(&path)
+        .unwrap_or_default()
+        .lines()
+        .count()
+}
+
 /* --- Config Types ---------------------------------------------------------- */
 
 #[derive(Serialize, Deserialize)]
@@ -249,7 +300,7 @@ pub fn load_config() -> Config {
     }
 }
 
-pub fn save_config(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+pub fn save_config(config: &Config) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let toml_str = toml::to_string_pretty(config)?;
     std::fs::write(config_path(), toml_str)?;
     Ok(())

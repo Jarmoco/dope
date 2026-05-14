@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dope panel</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; background: #f5f5f5; color: #333; }
+nav { background: #1a1a2e; color: #eee; padding: 0 24px; display: flex; align-items: center; gap: 24px; height: 48px; }
+nav h1 { font-size: 16px; font-weight: 600; color: #e94560; }
+nav a { color: #ccc; text-decoration: none; font-size: 13px; padding: 4px 8px; border-radius: 4px; }
+nav a:hover, nav a.active { color: #fff; background: rgba(255,255,255,0.1); }
+#app { max-width: 1100px; margin: 0 auto; padding: 24px; }
+h2 { font-size: 18px; margin-bottom: 16px; }
+.stats { display: flex; gap: 16px; margin-bottom: 24px; }
+.stat-card { background: #fff; border-radius: 8px; padding: 16px 24px; flex: 1; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.stat-card .value { font-size: 28px; font-weight: 700; }
+.stat-card .label { font-size: 12px; color: #888; margin-top: 4px; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+th, td { padding: 8px 12px; text-align: left; font-size: 13px; }
+th { background: #f9f9f9; font-weight: 600; color: #555; border-bottom: 1px solid #eee; }
+td { border-bottom: 1px solid #f5f5f5; }
+tr:hover td { background: #fafafa; }
+.badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.badge-2xx { background: #d4edda; color: #155724; }
+.badge-3xx { background: #cce5ff; color: #004085; }
+.badge-4xx { background: #fff3cd; color: #856404; }
+.badge-5xx { background: #f8d7da; color: #721c24; }
+.badge-request { background: #e2e3f5; color: #383d9e; }
+.badge-response { background: #d4edda; color: #155724; }
+.badge-error { background: #f8d7da; color: #721c24; }
+pre { font-family: "SF Mono", "Cascadia Code", monospace; font-size: 12px; background: #f9f9f9; padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+.filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filters input, .filters select { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+.filters input:focus, .filters select:focus { outline: none; border-color: #1a1a2e; }
+.btn { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-primary { background: #1a1a2e; color: #fff; }
+.btn-primary:hover { background: #16213e; }
+.btn-danger { background: #e94560; color: #fff; }
+.btn-danger:hover { background: #d63851; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.config-section { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.config-section h3 { font-size: 15px; margin-bottom: 12px; color: #1a1a2e; }
+.config-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.config-row label { font-size: 12px; color: #666; min-width: 80px; }
+.config-row input, .config-row select { padding: 5px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; flex: 1; min-width: 100px; }
+.config-row input[type="checkbox"] { min-width: auto; flex: 0; }
+.config-row input:focus, .config-row select:focus { outline: none; border-color: #1a1a2e; }
+.header-pair { display: flex; gap: 4px; align-items: center; }
+.header-pair input { flex: 1; }
+.header-pair span { color: #888; font-size: 12px; }
+.rule-card { border: 1px solid #eee; border-radius: 6px; padding: 12px; margin-bottom: 8px; }
+.rule-card:hover { border-color: #ddd; }
+.rule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.rule-header .domain-label { font-weight: 600; font-size: 13px; }
+.add-row { margin-top: 8px; }
+.empty { color: #999; font-size: 13px; padding: 12px 0; }
+.toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: #fff; padding: 12px 20px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity 0.3s; }
+.toast.show { opacity: 1; }
+.refresh-toggle { font-size: 12px; color: #888; cursor: pointer; user-select: none; }
+.refresh-toggle.active { color: #1a1a2e; font-weight: 600; }
+@media (max-width: 600px) {
+  .stats { flex-direction: column; }
+  .config-row { flex-direction: column; align-items: stretch; }
+}
+</style>
+</head>
+<body>
+<nav>
+  <h1>dope panel</h1>
+  <a href="#/" class="nav-link">Dashboard</a>
+  <a href="#/logs" class="nav-link">Logs</a>
+  <a href="#/config" class="nav-link">Config</a>
+</nav>
+<div id="app"></div>
+<div id="toast" class="toast"></div>
+
+<script>
+/* --- State ---------------------------------------------------------------- */
+
+let logsCache = [];
+let refreshInterval = null;
+let autoRefresh = true;
+let sinceTs = 0;
+
+/* --- API Helpers ---------------------------------------------------------- */
+
+async function api(url, opts) {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+/* --- Router --------------------------------------------------------------- */
+
+function navigate() {
+  const hash = location.hash.slice(1) || '/';
+  document.querySelectorAll('.nav-link').forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === location.hash);
+  });
+  const app = document.getElementById('app');
+  switch (hash.split('?')[0]) {
+    case '/': renderDashboard(app); break;
+    case '/logs': renderLogs(app); break;
+    case '/config': renderConfig(app); break;
+    default: app.innerHTML = '<h2>Not found</h2>';
+  }
+}
+
+window.addEventListener('hashchange', navigate);
+window.addEventListener('DOMContentLoaded', navigate);
+
+/* --- Dashboard ------------------------------------------------------------ */
+
+async function renderDashboard(app) {
+  stopRefresh();
+  app.innerHTML = '<h2>Dashboard</h2><div class="stats" id="stats"></div><h2>Recent Activity</h2><div id="activity"></div>';
+
+  const entries = await api('/api/logs?limit=200');
+  logsCache = entries;
+
+  const stats = document.getElementById('stats');
+  const total = entries.length;
+  const hosts = new Set(entries.filter(e => e.type === 'request').map(e => e.host)).size;
+  const errors = entries.filter(e => e.type === 'error' || (e.type === 'response' && e.status >= 500)).length;
+  stats.innerHTML = `
+    <div class="stat-card"><div class="value">${total}</div><div class="label">Total Entries</div></div>
+    <div class="stat-card"><div class="value">${hosts}</div><div class="label">Unique Hosts</div></div>
+    <div class="stat-card"><div class="value">${errors}</div><div class="label">Errors</div></div>
+  `;
+
+  renderActivityTable(document.getElementById('activity'), entries.slice(-20));
+  startRefresh(renderDashboardActivity);
+}
+
+async function renderDashboardActivity() {
+  const entries = await api('/api/logs?limit=20');
+  const container = document.getElementById('activity');
+  if (container) renderActivityTable(container, entries);
+}
+
+function renderActivityTable(container, entries) {
+  if (entries.length === 0) { container.innerHTML = '<div class="empty">No entries yet.</div>'; return; }
+  container.innerHTML = '<table><thead><tr><th>Time</th><th>Type</th><th>Details</th></tr></thead><tbody>' +
+    entries.slice().reverse().map(e => {
+      const ts = new Date(e.ts).toLocaleTimeString();
+      let typeBadge, details;
+      if (e.type === 'request') {
+        typeBadge = '<span class="badge badge-request">req</span>';
+        details = `${e.method} ${e.host}`;
+      } else if (e.type === 'response') {
+        const cls = `badge-${Math.floor(e.status / 100)}xx`;
+        typeBadge = `<span class="badge ${cls}">${e.status}</span>`;
+        details = `${e.content_type}`;
+      } else {
+        typeBadge = '<span class="badge badge-error">err</span>';
+        details = e.error.slice(0, 60);
+      }
+      return `<tr><td>${ts}</td><td>${typeBadge}</td><td>${details}</td></tr>`;
+    }).join('') + '</tbody></table>';
+}
+
+/* --- Logs ----------------------------------------------------------------- */
+
+async function renderLogs(app) {
+  stopRefresh();
+  app.innerHTML = `
+    <h2>Logs</h2>
+    <div class="filters">
+      <input type="text" id="filter-host" placeholder="Host..." oninput="renderLogTable()">
+      <select id="filter-type" onchange="renderLogTable()">
+        <option value="">All types</option>
+        <option value="request">Request</option>
+        <option value="response">Response</option>
+        <option value="error">Error</option>
+      </select>
+      <input type="text" id="filter-search" placeholder="Search..." oninput="renderLogTable()" style="flex:1">
+      <label class="refresh-toggle active" id="refresh-label">
+        <input type="checkbox" checked onchange="toggleRefresh(this.checked)"> Auto-refresh
+      </label>
+    </div>
+    <div id="log-table"></div>
+  `;
+  const entries = await api('/api/logs?limit=500');
+  logsCache = entries;
+  renderLogTable();
+  if (autoRefresh) startRefresh(refreshLogs);
+}
+
+async function refreshLogs() {
+  if (logsCache.length > 0) {
+    const lastTs = logsCache[logsCache.length - 1].ts;
+    const newEntries = await api(`/api/logs?since=${lastTs + 1}`);
+    if (newEntries.length > 0) {
+      logsCache = logsCache.concat(newEntries);
+      renderLogTable();
+    }
+  }
+}
+
+function toggleRefresh(on) {
+  autoRefresh = on;
+  if (on) startRefresh(refreshLogs);
+  else stopRefresh();
+}
+
+function startRefresh(fn) {
+  stopRefresh();
+  refreshInterval = setInterval(fn, 3000);
+}
+
+function stopRefresh() {
+  if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+}
+
+function renderLogTable() {
+  const host = (document.getElementById('filter-host')?.value || '').toLowerCase();
+  const type = document.getElementById('filter-type')?.value || '';
+  const search = (document.getElementById('filter-search')?.value || '').toLowerCase();
+  const container = document.getElementById('log-table');
+  if (!container) return;
+
+  let entries = logsCache;
+  if (host) entries = entries.filter(e => (e.host || '').toLowerCase().includes(host));
+  if (type) entries = entries.filter(e => e.type === type);
+  if (search) entries = entries.filter(e => JSON.stringify(e).toLowerCase().includes(search));
+
+  if (entries.length === 0) { container.innerHTML = '<div class="empty">No matching entries.</div>'; return; }
+
+  container.innerHTML = '<table><thead><tr><th>Time</th><th>Type</th><th>Details</th></tr></thead><tbody>' +
+    entries.slice().reverse().map((e, i) => {
+      const ts = new Date(e.ts).toLocaleTimeString();
+      let typeBadge, details, expanded;
+      if (e.type === 'request') {
+        typeBadge = '<span class="badge badge-request">req</span>';
+        details = `<strong>${e.method}</strong> ${e.host} <span style="color:#888">${e.uri.slice(0, 80)}</span>`;
+        expanded = `<pre>${JSON.stringify({method:e.method, uri:e.uri, host:e.host, user_agent:e.user_agent, accept:e.accept}, null, 2)}</pre>`;
+      } else if (e.type === 'response') {
+        const cls = `badge-${Math.floor(e.status / 100)}xx`;
+        typeBadge = `<span class="badge ${cls}">${e.status}</span>`;
+        details = `<span style="color:#888">${e.content_type}</span>`;
+        expanded = `<pre>${JSON.stringify({status:e.status, content_type:e.content_type, body_preview:e.body_preview}, null, 2)}</pre>`;
+      } else {
+        typeBadge = '<span class="badge badge-error">err</span>';
+        details = `<span style="color:#e94560">${e.error.slice(0, 80)}</span>`;
+        expanded = `<pre>${JSON.stringify({client_addr:e.client_addr, error:e.error}, null, 2)}</pre>`;
+      }
+      return `<tr onclick="toggleRow(this)" style="cursor:pointer"><td>${ts}</td><td>${typeBadge}</td><td>${details}</td></tr>
+              <tr style="display:none"><td colspan="3">${expanded}</td></tr>`;
+    }).join('') + '</tbody></table>';
+}
+
+function toggleRow(tr) {
+  const next = tr.nextElementSibling;
+  if (next && next.style.display === 'none') next.style.display = 'table-row';
+  else if (next) next.style.display = 'none';
+}
+
+/* --- Config --------------------------------------------------------------- */
+
+async function renderConfig(app) {
+  stopRefresh();
+  app.innerHTML = '<h2>Configuration</h2><div id="config-form">Loading...</div>';
+
+  const config = await api('/api/config');
+  renderConfigForm(app, config);
+}
+
+function renderConfigForm(app, config) {
+  const container = document.getElementById('config-form');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="config-section">
+      <h3>Server</h3>
+      <div class="config-row">
+        <label>Port</label>
+        <input type="number" id="cfg-port" value="${config.server.port}" min="1" max="65535">
+      </div>
+      <div class="config-row">
+        <label>Pause</label>
+        <input type="checkbox" id="cfg-pause" ${config.server.pause ? 'checked' : ''}>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <h3>Script Rules</h3>
+      <div id="scripts-list"></div>
+      <button class="btn btn-primary btn-sm add-row" onclick="addScriptRule()">+ Add Rule</button>
+    </div>
+
+    <div class="config-section">
+      <h3>Response Modifiers</h3>
+      <div id="response-list"></div>
+      <button class="btn btn-primary btn-sm add-row" onclick="addResponseRule()">+ Add Rule</button>
+    </div>
+
+    <div class="config-section">
+      <h3>Request Modifiers</h3>
+      <div id="request-list"></div>
+      <button class="btn btn-primary btn-sm add-row" onclick="addRequestRule()">+ Add Rule</button>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveConfig()" style="margin-top:8px;padding:10px 24px;font-size:15px">Save Configuration</button>
+  `;
+
+  window._config = config;
+  renderScriptRules(config.scripts || []);
+  renderResponseRules(config.modify_response || []);
+  renderRequestRules(config.modify_request || []);
+}
+
+function renderScriptRules(rules) {
+  const container = document.getElementById('scripts-list');
+  if (rules.length === 0) { container.innerHTML = '<div class="empty">No script rules configured.</div>'; return; }
+  container.innerHTML = rules.map((r, i) => `
+    <div class="rule-card" data-index="${i}">
+      <div class="rule-header">
+        <span class="domain-label">${r.domain || '(empty domain)'}</span>
+        <button class="btn btn-danger btn-sm" onclick="removeScriptRule(${i})">Remove</button>
+      </div>
+      <div class="config-row"><label>Domain</label><input type="text" value="${r.domain}" onchange="updateScriptRule(${i},'domain',this.value)"></div>
+      <div class="config-row"><label>Scripts</label><input type="text" value="${(r.scripts||[]).join(', ')}" placeholder="comma-separated" onchange="updateScriptRule(${i},'scripts',this.value.split(/,\s*/))"></div>
+    </div>
+  `).join('');
+}
+
+function renderResponseRules(rules) {
+  const container = document.getElementById('response-list');
+  if (rules.length === 0) { container.innerHTML = '<div class="empty">No response modifiers configured.</div>'; return; }
+  container.innerHTML = rules.map((r, i) => `
+    <div class="rule-card" data-index="${i}">
+      <div class="rule-header">
+        <span class="domain-label">${r.domain || '(empty domain)'}</span>
+        <button class="btn btn-danger btn-sm" onclick="removeResponseRule(${i})">Remove</button>
+      </div>
+      <div class="config-row"><label>Domain</label><input type="text" value="${r.domain}" onchange="updateResponseRule(${i},'domain',this.value)"></div>
+      <div class="config-row">
+        <label>CSP</label>
+        <select onchange="updateResponseRule(${i},'csp',this.value)">
+          <option value="">(none)</option>
+          <option value="remove_nonce" ${r.csp === 'remove_nonce' ? 'selected' : ''}>remove_nonce</option>
+          <option value="remove_all" ${r.csp === 'remove_all' ? 'selected' : ''}>remove_all</option>
+          <option value="relax_connect_src" ${r.csp === 'relax_connect_src' ? 'selected' : ''}>relax_connect_src</option>
+          <option value="keep" ${r.csp === 'keep' ? 'selected' : ''}>keep</option>
+        </select>
+      </div>
+      <div class="config-row"><label>Remove Headers</label><input type="text" value="${(r.remove_headers||[]).join(', ')}" placeholder="comma-separated" onchange="updateResponseRule(${i},'remove_headers',this.value ? this.value.split(/,\s*/) : null)"></div>
+      <div class="config-row"><label>Inject At</label>
+        <select onchange="updateResponseRule(${i},'inject_at',this.value||null)">
+          <option value="">(default)</option>
+          <option value="head_end" ${r.inject_at === 'head_end' ? 'selected' : ''}>head_end</option>
+          <option value="body_end" ${r.inject_at === 'body_end' ? 'selected' : ''}>body_end</option>
+          <option value="html_end" ${r.inject_at === 'html_end' ? 'selected' : ''}>html_end</option>
+          <option value="append" ${r.inject_at === 'append' ? 'selected' : ''}>append</option>
+        </select>
+      </div>
+      <div class="config-row"><label>Add Headers</label></div>
+      <div id="response-headers-${i}"></div>
+      <button class="btn btn-sm" onclick="addResponseHeader(${i})" style="margin-top:4px;background:#eee">+ Add Header</button>
+    </div>
+  `).join('');
+  rules.forEach((r, i) => renderResponseHeaders(i, r.add_headers || {}));
+}
+
+function renderResponseHeaders(idx, headers) {
+  const container = document.getElementById(`response-headers-${idx}`);
+  if (!container) return;
+  const entries = Object.entries(headers);
+  container.innerHTML = entries.map(([k, v], hi) => `
+    <div class="header-pair config-row">
+      <input type="text" value="${k}" placeholder="Name" onchange="updateResponseHeader(${idx},${hi},'key',this.value)">
+      <span>=</span>
+      <input type="text" value="${v}" placeholder="Value" onchange="updateResponseHeader(${idx},${hi},'val',this.value)">
+      <button class="btn btn-danger btn-sm" onclick="removeResponseHeader(${idx},${hi})">x</button>
+    </div>
+  `).join('');
+}
+
+function renderRequestRules(rules) {
+  const container = document.getElementById('request-list');
+  if (rules.length === 0) { container.innerHTML = '<div class="empty">No request modifiers configured.</div>'; return; }
+  container.innerHTML = rules.map((r, i) => `
+    <div class="rule-card" data-index="${i}">
+      <div class="rule-header">
+        <span class="domain-label">${r.domain || '(empty domain)'}</span>
+        <button class="btn btn-danger btn-sm" onclick="removeRequestRule(${i})">Remove</button>
+      </div>
+      <div class="config-row"><label>Domain</label><input type="text" value="${r.domain}" onchange="updateRequestRule(${i},'domain',this.value)"></div>
+      <div class="config-row"><label>Remove Headers</label><input type="text" value="${(r.remove_headers||[]).join(', ')}" placeholder="comma-separated" onchange="updateRequestRule(${i},'remove_headers',this.value ? this.value.split(/,\s*/) : null)"></div>
+      <div class="config-row"><label>Add Headers</label></div>
+      <div id="request-headers-${i}"></div>
+      <button class="btn btn-sm" onclick="addRequestHeader(${i})" style="margin-top:4px;background:#eee">+ Add Header</button>
+    </div>
+  `).join('');
+  rules.forEach((r, i) => renderRequestHeaders(i, r.add_headers || {}));
+}
+
+function renderRequestHeaders(idx, headers) {
+  const container = document.getElementById(`request-headers-${idx}`);
+  if (!container) return;
+  const entries = Object.entries(headers);
+  container.innerHTML = entries.map(([k, v], hi) => `
+    <div class="header-pair config-row">
+      <input type="text" value="${k}" placeholder="Name" onchange="updateRequestHeader(${idx},${hi},'key',this.value)">
+      <span>=</span>
+      <input type="text" value="${v}" placeholder="Value" onchange="updateRequestHeader(${idx},${hi},'val',this.value)">
+      <button class="btn btn-danger btn-sm" onclick="removeRequestHeader(${idx},${hi})">x</button>
+    </div>
+  `).join('');
+}
+
+/* --- Config mutations ----------------------------------------------------- */
+
+function getConfig() { return window._config || { server: { port: 8080, pause: false }, scripts: [], modify_response: [], modify_request: [] }; }
+
+function addScriptRule() {
+  const cfg = getConfig();
+  if (!cfg.scripts) cfg.scripts = [];
+  cfg.scripts.push({ domain: '', scripts: [] });
+  renderScriptRules(cfg.scripts);
+}
+function removeScriptRule(i) {
+  const cfg = getConfig();
+  cfg.scripts.splice(i, 1);
+  renderScriptRules(cfg.scripts);
+}
+function updateScriptRule(i, field, val) {
+  const cfg = getConfig();
+  cfg.scripts[i][field] = val;
+}
+
+function addResponseRule() {
+  const cfg = getConfig();
+  if (!cfg.modify_response) cfg.modify_response = [];
+  cfg.modify_response.push({ domain: '', csp: null, remove_headers: null, add_headers: null, inject_at: null });
+  renderResponseRules(cfg.modify_response);
+}
+function removeResponseRule(i) {
+  const cfg = getConfig();
+  cfg.modify_response.splice(i, 1);
+  renderResponseRules(cfg.modify_response);
+}
+function updateResponseRule(i, field, val) {
+  const cfg = getConfig();
+  cfg.modify_response[i][field] = val;
+}
+function addResponseHeader(i) {
+  const cfg = getConfig();
+  const rule = cfg.modify_response[i];
+  if (!rule.add_headers) rule.add_headers = {};
+  const base = Object.keys(rule.add_headers).length;
+  rule.add_headers[`key${base}`] = 'value';
+  renderResponseHeaders(i, rule.add_headers);
+}
+function removeResponseHeader(i, hi) {
+  const cfg = getConfig();
+  const headers = cfg.modify_response[i].add_headers || {};
+  const keys = Object.keys(headers);
+  const k = keys[hi];
+  if (k !== undefined) { delete headers[k]; }
+  renderResponseHeaders(i, headers);
+}
+function updateResponseHeader(i, hi, which, val) {
+  const cfg = getConfig();
+  const headers = cfg.modify_response[i].add_headers || {};
+  const keys = Object.keys(headers);
+  const k = keys[hi];
+  if (k === undefined) return;
+  if (which === 'key') {
+    headers[val] = headers[k];
+    if (val !== k) delete headers[k];
+  } else {
+    headers[k] = val;
+  }
+}
+
+function addRequestRule() {
+  const cfg = getConfig();
+  if (!cfg.modify_request) cfg.modify_request = [];
+  cfg.modify_request.push({ domain: '', remove_headers: null, add_headers: null });
+  renderRequestRules(cfg.modify_request);
+}
+function removeRequestRule(i) {
+  const cfg = getConfig();
+  cfg.modify_request.splice(i, 1);
+  renderRequestRules(cfg.modify_request);
+}
+function updateRequestRule(i, field, val) {
+  const cfg = getConfig();
+  cfg.modify_request[i][field] = val;
+}
+function addRequestHeader(i) {
+  const cfg = getConfig();
+  const rule = cfg.modify_request[i];
+  if (!rule.add_headers) rule.add_headers = {};
+  const base = Object.keys(rule.add_headers).length;
+  rule.add_headers[`key${base}`] = 'value';
+  renderRequestHeaders(i, rule.add_headers);
+}
+function removeRequestHeader(i, hi) {
+  const cfg = getConfig();
+  const headers = cfg.modify_request[i].add_headers || {};
+  const keys = Object.keys(headers);
+  const k = keys[hi];
+  if (k !== undefined) { delete headers[k]; }
+  renderRequestHeaders(i, headers);
+}
+function updateRequestHeader(i, hi, which, val) {
+  const cfg = getConfig();
+  const headers = cfg.modify_request[i].add_headers || {};
+  const keys = Object.keys(headers);
+  const k = keys[hi];
+  if (k === undefined) return;
+  if (which === 'key') {
+    headers[val] = headers[k];
+    if (val !== k) delete headers[k];
+  } else {
+    headers[k] = val;
+  }
+}
+
+async function saveConfig() {
+  const cfg = getConfig();
+  cfg.server.port = parseInt(document.getElementById('cfg-port').value) || 8080;
+  cfg.server.pause = document.getElementById('cfg-pause').checked || null;
+
+  try {
+    const res = await fetch('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    });
+    if (res.ok) { toast('Configuration saved'); }
+    else { toast('Failed to save: ' + (await res.text())); }
+  } catch (e) {
+    toast('Failed to save: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>
