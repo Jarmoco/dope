@@ -56,8 +56,23 @@ impl HttpHandler for TrafficHandler {
         ctx: &HttpContext,
         mut req: Request<Body>,
     ) -> RequestOrResponse {
-        let host = req.uri().host().unwrap_or("unknown").to_string();
-        let full_uri = req.uri().to_string();
+        let uri_str = req.uri().to_string();
+        let host = req
+            .uri()
+            .host()
+            .or_else(|| {
+                req.headers()
+                    .get(header::HOST)
+                    .and_then(|v| v.to_str().ok())
+            })
+            .unwrap_or("unknown")
+            .to_string();
+
+        let full_uri = if req.uri().scheme().is_some() {
+            uri_str
+        } else {
+            format!("https://{}{}", host, uri_str)
+        };
 
         logging::log_request(req.method(), req.uri(), req.headers(), &host);
 

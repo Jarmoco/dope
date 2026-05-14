@@ -14,7 +14,7 @@ use std::io::IsTerminal;
 use std::net::SocketAddr;
 use tracing::*;
 use tracing_appender;
-use tracing_subscriber::prelude::*;
+use tracing_subscriber::{prelude::*, EnvFilter};
 
 mod config;
 mod handler;
@@ -22,6 +22,22 @@ mod inject;
 mod logging;
 mod modify;
 mod scripts;
+
+/* --- Help ------------------------------------------------------------------ */
+
+fn print_help() {
+    println!("dope — MITM proxy with userscript injection");
+    println!();
+    println!("USAGE:");
+    println!("  dope [OPTIONS]");
+    println!();
+    println!("OPTIONS:");
+    println!("  -h, --help       Print this help message");
+    println!();
+    println!("ENVIRONMENT:");
+    println!("  RUST_LOG         Log level (trace, debug, info, warn, error)");
+    println!("                   Default: info");
+}
 
 /* --- Shutdown -------------------------------------------------------------- */
 
@@ -35,6 +51,14 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() {
+    if std::env::args().any(|a| a == "-h" || a == "--help") {
+        print_help();
+        return;
+    }
+
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
     let file_appender = tracing_appender::rolling::never("logs", "dope.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
@@ -42,7 +66,9 @@ async fn main() {
         .with_writer(non_blocking)
         .with_ansi(false);
 
-    let subscriber = tracing_subscriber::registry().with(file_layer);
+    let subscriber = tracing_subscriber::registry()
+        .with(filter)
+        .with(file_layer);
 
     if std::io::stdout().is_terminal() {
         let stdout_layer = tracing_subscriber::fmt::layer()
