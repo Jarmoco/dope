@@ -34,7 +34,16 @@ function renderResponseRules(rules) {
   const container = document.getElementById('response-list');
   if (rules.length === 0) { container.innerHTML = T.empty('No response modifiers configured.'); return; }
   container.innerHTML = rules.map((r, i) => T.responseRuleCard(i, r)).join('');
-  rules.forEach((r, i) => renderResponseHeaders(i, r.add_headers || {}));
+  rules.forEach((r, i) => {
+    renderResponseHeaders(i, r.add_headers || {});
+    renderResponseRemoveHeaders(i, r.remove_headers || []);
+  });
+}
+
+function renderResponseRemoveHeaders(idx, headers) {
+  const container = document.getElementById(`response-remove-headers-${idx}`);
+  if (!container) return;
+  container.innerHTML = headers.map((h, hi) => T.removeHeaderPair(idx, hi, h)).join('');
 }
 
 function renderResponseHeaders(idx, headers) {
@@ -48,7 +57,16 @@ function renderRequestRules(rules) {
   const container = document.getElementById('request-list');
   if (rules.length === 0) { container.innerHTML = T.empty('No request modifiers configured.'); return; }
   container.innerHTML = rules.map((r, i) => T.requestRuleCard(i, r)).join('');
-  rules.forEach((r, i) => renderRequestHeaders(i, r.add_headers || {}));
+  rules.forEach((r, i) => {
+    renderRequestHeaders(i, r.add_headers || {});
+    renderRequestRemoveHeaders(i, r.remove_headers || []);
+  });
+}
+
+function renderRequestRemoveHeaders(idx, headers) {
+  const container = document.getElementById(`request-remove-headers-${idx}`);
+  if (!container) return;
+  container.innerHTML = headers.map((h, hi) => T.removeHeaderPair(idx, hi, h)).join('');
 }
 
 function renderRequestHeaders(idx, headers) {
@@ -122,6 +140,26 @@ function updateResponseHeader(i, hi, which, val) {
     headers[k] = val;
   }
 }
+function addResponseRemoveHeader(i) {
+  const cfg = getConfig();
+  const rule = cfg.modify_response[i];
+  if (!rule.remove_headers) rule.remove_headers = [];
+  rule.remove_headers.push('');
+  renderResponseRemoveHeaders(i, rule.remove_headers);
+}
+function removeResponseRemoveHeader(i, hi) {
+  const cfg = getConfig();
+  const headers = cfg.modify_response[i].remove_headers || [];
+  headers.splice(hi, 1);
+  renderResponseRemoveHeaders(i, headers);
+}
+function updateResponseRemoveHeader(i, hi, val) {
+  const cfg = getConfig();
+  const headers = cfg.modify_response[i].remove_headers || [];
+  if (headers[hi] !== undefined) {
+    headers[hi] = val;
+  }
+}
 
 function addRequestRule() {
   const cfg = getConfig();
@@ -137,6 +175,26 @@ function removeRequestRule(i) {
 function updateRequestRule(i, field, val) {
   const cfg = getConfig();
   cfg.modify_request[i][field] = val;
+}
+function addRequestRemoveHeader(i) {
+  const cfg = getConfig();
+  const rule = cfg.modify_request[i];
+  if (!rule.remove_headers) rule.remove_headers = [];
+  rule.remove_headers.push('');
+  renderRequestRemoveHeaders(i, rule.remove_headers);
+}
+function removeRequestRemoveHeader(i, hi) {
+  const cfg = getConfig();
+  const headers = cfg.modify_request[i].remove_headers || [];
+  headers.splice(hi, 1);
+  renderRequestRemoveHeaders(i, headers);
+}
+function updateRequestRemoveHeader(i, hi, val) {
+  const cfg = getConfig();
+  const headers = cfg.modify_request[i].remove_headers || [];
+  if (headers[hi] !== undefined) {
+    headers[hi] = val;
+  }
 }
 function addRequestHeader(i) {
   const cfg = getConfig();

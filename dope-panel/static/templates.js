@@ -30,6 +30,15 @@ T.activityTable = (rows) => `
 T.activityRow = (ts, typeBadge, details) =>
   `<tr><td>${ts}</td><td>${typeBadge}</td><td>${details}</td></tr>`;
 
+T.combinedRow = (ts, method, host, status, contentType, duration, detailsExpanded) => `
+  <tr class="combined-row" onclick="toggleCombined(this)" style="cursor:pointer">
+    <td>${ts}</td>
+    <td><span class="badge badge-request">${method}</span></td>
+    <td>${host} <span class="arrow">==></span> <span class="badge badge-${Math.floor(status / 100)}xx">${status}</span> <span class="meta">${contentType || ''}</span> <span class="duration">${duration}ms</span></td>
+  </tr>
+  <tr class="combined-details" style="display:none"><td colspan="3">${detailsExpanded}</td></tr>
+`;
+
 T.logsPage = `
   <h2>Logs</h2>
   <div class="filters">
@@ -88,7 +97,7 @@ T.configForm = (port, pause) => `
     <div id="request-list"></div>
     <button class="btn btn-primary btn-sm add-row" onclick="addRequestRule()">+ Add Rule</button>
   </div>
-  <button class="btn btn-primary" onclick="saveConfig()" style="margin-top:8px;padding:10px 24px;font-size:15px">Save Configuration</button>
+  <button class="btn btn-primary btn-lg" onclick="saveConfig()">Save Configuration</button>
 `;
 
 T.ruleCard = (idx, domain, actions) => `
@@ -128,8 +137,10 @@ T.responseRuleCard = (idx, r) => `
         <option value="keep" ${r.csp === 'keep' ? 'selected' : ''}>keep</option>
       </select>
     </div>
-    <div class="config-row"><label>Remove Headers</label><input type="text" value="${(r.remove_headers||[]).join(', ')}" placeholder="comma-separated" onchange="updateResponseRule(${idx},'remove_headers',this.value ? this.value.split(/,\s*/) : null)"></div>
-    <div class="config-row"><label>Inject At</label>
+    <div class="config-row"><label>Remove Headers</label></div>
+    <div id="response-remove-headers-${idx}"></div>
+    <button class="btn btn-sm btn-secondary" onclick="addResponseRemoveHeader(${idx})">+ Add Header to Remove</button>
+    <div class="config-row config-row-gap"><label>Inject At</label>
       <select onchange="updateResponseRule(${idx},'inject_at',this.value||null)">
         <option value="">(default)</option>
         <option value="head_end" ${r.inject_at === 'head_end' ? 'selected' : ''}>head_end</option>
@@ -138,9 +149,9 @@ T.responseRuleCard = (idx, r) => `
         <option value="append" ${r.inject_at === 'append' ? 'selected' : ''}>append</option>
       </select>
     </div>
-    <div class="config-row"><label>Add Headers</label></div>
+    <div class="config-row config-row-gap"><label>Add Headers</label></div>
     <div id="response-headers-${idx}"></div>
-    <button class="btn btn-sm" onclick="addResponseHeader(${idx})" style="margin-top:4px;background:#eee">+ Add Header</button>
+    <button class="btn btn-sm btn-secondary" onclick="addResponseHeader(${idx})">+ Add Header</button>
   </div>
 `;
 
@@ -151,10 +162,12 @@ T.requestRuleCard = (idx, r) => `
       <button class="btn btn-danger btn-sm" onclick="removeRequestRule(${idx})">Remove</button>
     </div>
     <div class="config-row"><label>Domain</label><input type="text" value="${r.domain}" onchange="updateRequestRule(${idx},'domain',this.value)"></div>
-    <div class="config-row"><label>Remove Headers</label><input type="text" value="${(r.remove_headers||[]).join(', ')}" placeholder="comma-separated" onchange="updateRequestRule(${idx},'remove_headers',this.value ? this.value.split(/,\s*/) : null)"></div>
-    <div class="config-row"><label>Add Headers</label></div>
+    <div class="config-row"><label>Remove Headers</label></div>
+    <div id="request-remove-headers-${idx}"></div>
+    <button class="btn btn-sm btn-secondary" onclick="addRequestRemoveHeader(${idx})">+ Add Header to Remove</button>
+    <div class="config-row config-row-gap"><label>Add Headers</label></div>
     <div id="request-headers-${idx}"></div>
-    <button class="btn btn-sm" onclick="addRequestHeader(${idx})" style="margin-top:4px;background:#eee">+ Add Header</button>
+    <button class="btn btn-sm btn-secondary" onclick="addRequestHeader(${idx})">+ Add Header</button>
   </div>
 `;
 
@@ -164,5 +177,12 @@ T.headerPair = (idx, hi, k, v, type) => `
     <span>=</span>
     <input type="text" value="${v}" placeholder="Value" onchange="update${type}Header(${idx},${hi},'val',this.value)">
     <button class="btn btn-danger btn-sm" onclick="remove${type}Header(${idx},${hi})">x</button>
+  </div>
+`;
+
+T.removeHeaderPair = (idx, hi, v) => `
+  <div class="header-pair config-row">
+    <input type="text" value="${v}" placeholder="Header name" onchange="updateRequestRemoveHeader(${idx},${hi},this.value)">
+    <button class="btn btn-danger btn-sm" onclick="removeRequestRemoveHeader(${idx},${hi})">x</button>
   </div>
 `;

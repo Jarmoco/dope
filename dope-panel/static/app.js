@@ -5,7 +5,8 @@
 
 /* --- Shared State ---------------------------------------------------------- */
 
-let logsCache = [];
+window.dope = {};
+window.dope.logsCache = [];
 
 /* --- API Helpers ---------------------------------------------------------- */
 
@@ -20,15 +21,6 @@ function toast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2500);
-}
-
-function stopRefresh() {
-  if (typeof refreshInterval !== 'undefined' && refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
-}
-
-function startRefresh(fn) {
-  stopRefresh();
-  refreshInterval = setInterval(fn, 3000);
 }
 
 /* --- Router --------------------------------------------------------------- */
@@ -55,7 +47,7 @@ window.addEventListener('DOMContentLoaded', navigate);
 async function renderDashboard(app) {
   stopRefresh();
   const entries = await api('/api/logs?limit=200');
-  logsCache = entries;
+  window.dope.logsCache = entries;
 
   const total = entries.length;
   const hosts = new Set(entries.filter(e => e.type === 'request').map(e => e.host)).size;

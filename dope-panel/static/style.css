@@ -3,6 +3,69 @@
  * Admin panel styles.
  * -------------------------------------------------------------------------- */
 
+:root {
+  /* Brand & Primary */
+  --color-brand: #e94560;
+  --color-primary: #1a1a2e;
+  --color-primary-hover: #16213e;
+
+  /* Backgrounds */
+  --color-bg-main: #f5f5f5;
+  --color-bg-card: #ffffff;
+  --color-bg-header: #f9f9f9;
+  --color-bg-code: #f9f9f9;
+  --color-bg-hover: #fafafa;
+
+  /* Text */
+  --color-text-main: #333333;
+  --color-text-heading: #555555;
+  --color-text-muted: #666666;
+  --color-text-subtle: #888888;
+  --color-text-faint: #999999;
+
+  /* Nav */
+  --color-nav-bg: #1a1a2e;
+  --color-nav-text: #eeeeee;
+  --color-nav-link: #cccccc;
+  --color-nav-link-hover: #ffffff;
+
+  /* Borders */
+  --color-border-light: #eeeeee;
+  --color-border: #dddddd;
+  --color-border-focus: #1a1a2e;
+
+  /* Badge: 2xx Success */
+  --color-badge-2xx-bg: #d4edda;
+  --color-badge-2xx-text: #155724;
+
+  /* Badge: 3xx Redirect */
+  --color-badge-3xx-bg: #cce5ff;
+  --color-badge-3xx-text: #004085;
+
+  /* Badge: 4xx Client Error */
+  --color-badge-4xx-bg: #fff3cd;
+  --color-badge-4xx-text: #856404;
+
+  /* Badge: 5xx Server Error */
+  --color-badge-5xx-bg: #f8d7da;
+  --color-badge-5xx-text: #721c24;
+
+  /* Badge: Request */
+  --color-badge-req-bg: #e2e3f5;
+  --color-badge-req-text: #383d9e;
+
+  /* Badge: Error */
+  --color-badge-err-bg: #f8d7da;
+  --color-badge-err-text: #721c24;
+
+  /* Buttons */
+  --color-btn-primary: #1a1a2e;
+  --color-btn-primary-hover: #16213e;
+  --color-btn-danger: #e94560;
+  --color-btn-danger-hover: #d63851;
+  --color-btn-secondary: #eeeeee;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -12,13 +75,13 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
-  background: #f5f5f5;
-  color: #333;
+  background: var(--color-bg-main);
+  color: var(--color-text-main);
 }
 
 nav {
-  background: #1a1a2e;
-  color: #eee;
+  background: var(--color-nav-bg);
+  color: var(--color-nav-text);
   padding: 0 24px;
   display: flex;
   align-items: center;
@@ -29,11 +92,11 @@ nav {
 nav h1 {
   font-size: 16px;
   font-weight: 600;
-  color: #e94560;
+  color: var(--color-brand);
 }
 
 nav a {
-  color: #ccc;
+  color: var(--color-nav-link);
   text-decoration: none;
   font-size: 13px;
   padding: 4px 8px;
@@ -42,7 +105,7 @@ nav a {
 
 nav a:hover,
 nav a.active {
-  color: #fff;
+  color: var(--color-nav-link-hover);
   background: rgba(255, 255, 255, 0.1);
 }
 
@@ -64,7 +127,7 @@ h2 {
 }
 
 .stat-card {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 8px;
   padding: 16px 24px;
   flex: 1;
@@ -78,14 +141,14 @@ h2 {
 
 .stat-card .label {
   font-size: 12px;
-  color: #888;
+  color: var(--color-text-subtle);
   margin-top: 4px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -99,18 +162,18 @@ td {
 }
 
 th {
-  background: #f9f9f9;
+  background: var(--color-bg-header);
   font-weight: 600;
-  color: #555;
-  border-bottom: 1px solid #eee;
+  color: var(--color-text-heading);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 td {
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid var(--color-bg-main);
 }
 
 tr:hover td {
-  background: #fafafa;
+  background: var(--color-bg-hover);
 }
 
 .badge {
@@ -122,44 +185,44 @@ tr:hover td {
 }
 
 .badge-2xx {
-  background: #d4edda;
-  color: #155724;
+  background: var(--color-badge-2xx-bg);
+  color: var(--color-badge-2xx-text);
 }
 
 .badge-3xx {
-  background: #cce5ff;
-  color: #004085;
+  background: var(--color-badge-3xx-bg);
+  color: var(--color-badge-3xx-text);
 }
 
 .badge-4xx {
-  background: #fff3cd;
-  color: #856404;
+  background: var(--color-badge-4xx-bg);
+  color: var(--color-badge-4xx-text);
 }
 
 .badge-5xx {
-  background: #f8d7da;
-  color: #721c24;
+  background: var(--color-badge-5xx-bg);
+  color: var(--color-badge-5xx-text);
 }
 
 .badge-request {
-  background: #e2e3f5;
-  color: #383d9e;
+  background: var(--color-badge-req-bg);
+  color: var(--color-badge-req-text);
 }
 
 .badge-response {
-  background: #d4edda;
-  color: #155724;
+  background: var(--color-badge-2xx-bg);
+  color: var(--color-badge-2xx-text);
 }
 
 .badge-error {
-  background: #f8d7da;
-  color: #721c24;
+  background: var(--color-badge-err-bg);
+  color: var(--color-badge-err-text);
 }
 
 pre {
   font-family: "SF Mono", "Cascadia Code", monospace;
   font-size: 12px;
-  background: #f9f9f9;
+  background: var(--color-bg-code);
   padding: 8px;
   border-radius: 4px;
   overflow-x: auto;
@@ -176,7 +239,7 @@ pre {
 .filters input,
 .filters select {
   padding: 6px 10px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 13px;
 }
@@ -184,7 +247,7 @@ pre {
 .filters input:focus,
 .filters select:focus {
   outline: none;
-  border-color: #1a1a2e;
+  border-color: var(--color-border-focus);
 }
 
 .btn {
@@ -196,21 +259,21 @@ pre {
 }
 
 .btn-primary {
-  background: #1a1a2e;
-  color: #fff;
+  background: var(--color-btn-primary);
+  color: #ffffff;
 }
 
 .btn-primary:hover {
-  background: #16213e;
+  background: var(--color-btn-primary-hover);
 }
 
 .btn-danger {
-  background: #e94560;
-  color: #fff;
+  background: var(--color-btn-danger);
+  color: #ffffff;
 }
 
 .btn-danger:hover {
-  background: #d63851;
+  background: var(--color-btn-danger-hover);
 }
 
 .btn-sm {
@@ -218,8 +281,18 @@ pre {
   font-size: 12px;
 }
 
+.btn-secondary {
+  background: var(--color-btn-secondary);
+}
+
+.btn-lg {
+  margin-top: 8px;
+  padding: 10px 24px;
+  font-size: 15px;
+}
+
 .config-section {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 16px;
@@ -229,7 +302,7 @@ pre {
 .config-section h3 {
   font-size: 15px;
   margin-bottom: 12px;
-  color: #1a1a2e;
+  color: var(--color-primary);
 }
 
 .config-row {
@@ -242,14 +315,18 @@ pre {
 
 .config-row label {
   font-size: 12px;
-  color: #666;
+  color: var(--color-text-muted);
   min-width: 80px;
+}
+
+.config-row-gap {
+  margin-top: 12px;
 }
 
 .config-row input,
 .config-row select {
   padding: 5px 8px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 13px;
   flex: 1;
@@ -264,7 +341,7 @@ pre {
 .config-row input:focus,
 .config-row select:focus {
   outline: none;
-  border-color: #1a1a2e;
+  border-color: var(--color-border-focus);
 }
 
 .header-pair {
@@ -278,19 +355,19 @@ pre {
 }
 
 .header-pair span {
-  color: #888;
+  color: var(--color-text-subtle);
   font-size: 12px;
 }
 
 .rule-card {
-  border: 1px solid #eee;
+  border: 1px solid var(--color-border-light);
   border-radius: 6px;
   padding: 12px;
   margin-bottom: 8px;
 }
 
 .rule-card:hover {
-  border-color: #ddd;
+  border-color: var(--color-border);
 }
 
 .rule-header {
@@ -310,7 +387,7 @@ pre {
 }
 
 .empty {
-  color: #999;
+  color: var(--color-text-faint);
   font-size: 13px;
   padding: 12px 0;
 }
@@ -319,8 +396,8 @@ pre {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  background: #1a1a2e;
-  color: #fff;
+  background: var(--color-primary);
+  color: #ffffff;
   padding: 12px 20px;
   border-radius: 6px;
   font-size: 13px;
@@ -334,14 +411,44 @@ pre {
 
 .refresh-toggle {
   font-size: 12px;
-  color: #888;
+  color: var(--color-text-subtle);
   cursor: pointer;
   user-select: none;
 }
 
 .refresh-toggle.active {
-  color: #1a1a2e;
+  color: var(--color-primary);
   font-weight: 600;
+}
+
+.combined-row .arrow {
+  color: var(--color-text-subtle);
+  margin: 0 4px;
+}
+
+.combined-row .meta {
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+
+.combined-row .duration {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.detail-section {
+  margin-bottom: 12px;
+}
+
+.detail-section h4 {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.detail-section pre {
+  margin: 0;
 }
 
 @media (max-width: 600px) {
