@@ -136,6 +136,7 @@ scripts = ["example"]
 #   remove_headers  — list of response headers to strip (optional)
 #   add_headers     — map of headers to inject into the response (optional)
 #   inject_at       — where to inject <script> tags in the HTML (optional)
+#                     "head_end"           — before </head>, fallback to <body>
 #                     "body_end" (default) — before </body>, fallback to </html>
 #                     "html_end"           — before </html>, fallback to append
 #                     "append"             — at the very end of the document

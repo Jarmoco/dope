@@ -43,6 +43,15 @@ pub fn inject_scripts(html: &mut String, domain: &str, config: &Config) {
         };
 
         match inject_at {
+            "head_end" => {
+                if html.contains("</head>") {
+                    *html = html.replace("</head>", &format!("{}{}", tag, "</head>"));
+                } else if html.contains("<body") {
+                    *html = html.replace("<body", &format!("{}{}", tag, "<body"));
+                } else {
+                    html.push_str(&tag);
+                }
+            }
             "body_end" => {
                 if html.contains("</body>") {
                     *html = html.replace("</body>", &format!("{}{}", tag, "</body>"));
