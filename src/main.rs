@@ -33,6 +33,7 @@ fn print_help() {
     println!();
     println!("OPTIONS:");
     println!("  -h, --help       Print this help message");
+    println!("  -pp              Pretty-print logs (no timestamps, no targets)");
     println!();
     println!("ENVIRONMENT:");
     println!("  RUST_LOG         Log level (trace, debug, info, warn, error)");
@@ -106,6 +107,8 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() {
+    let pretty = std::env::args().any(|a| a == "-pp");
+
     if std::env::args().any(|a| a == "-h" || a == "--help") {
         print_help();
         return;
@@ -126,11 +129,20 @@ async fn main() {
         .with(file_layer);
 
     if std::io::stdout().is_terminal() {
-        let stdout_layer = tracing_subscriber::fmt::layer()
-            .with_writer(std::io::stdout)
-            .with_ansi(true);
+        if pretty {
+            let stdout_layer = tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stdout)
+                .with_ansi(true)
+                .pretty();
 
-        subscriber.with(stdout_layer).init();
+            subscriber.with(stdout_layer).init();
+        } else {
+            let stdout_layer = tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stdout)
+                .with_ansi(true);
+
+            subscriber.with(stdout_layer).init();
+        }
     } else {
         subscriber.init();
     }
