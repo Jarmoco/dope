@@ -52,7 +52,7 @@ impl Config {
         let mut result = Vec::new();
         if let Some(scripts) = &self.scripts {
             for rule in scripts {
-                if rule.domain == domain {
+                if rule.domain == domain || rule.domain == "*" {
                     result.extend(rule.scripts.clone());
                 }
             }
@@ -61,17 +61,15 @@ impl Config {
     }
 
     pub fn get_response_modifiers(&self, domain: &str) -> Option<&ResponseModifier> {
-        self.modify_response
-            .as_ref()?
-            .iter()
-            .find(|m| m.domain == domain)
+        let modifiers = self.modify_response.as_ref()?;
+        modifiers.iter().find(|m| m.domain == domain)
+            .or_else(|| modifiers.iter().find(|m| m.domain == "*"))
     }
 
     pub fn get_request_modifiers(&self, domain: &str) -> Option<&RequestModifier> {
-        self.modify_request
-            .as_ref()?
-            .iter()
-            .find(|m| m.domain == domain)
+        let modifiers = self.modify_request.as_ref()?;
+        modifiers.iter().find(|m| m.domain == domain)
+            .or_else(|| modifiers.iter().find(|m| m.domain == "*"))
     }
 }
 
@@ -111,16 +109,12 @@ port = 8080
 #
 # Example:
 #   domain = "github.com"        — matches github.com and all subpages
+#   domain = "*"                 — matches all domains
 # -----------------------------------------------------------------------------
-
-[[scripts]]
-domain = "github.com"
-scripts = ["my-github-script"]
 
 [[scripts]]
 domain = "www.google.com"
 scripts = ["example"]
-
 
 # -----------------------------------------------------------------------------
 # RESPONSE MODIFIERS
@@ -129,7 +123,7 @@ scripts = ["example"]
 # Only the first matching [[modify_response]] entry is applied per domain.
 #
 # Fields:
-#   domain          — domain to match (required)
+#   domain          — domain to match (required, use "*" to match all domains)
 #   csp             — Content-Security-Policy handling (optional)
 #                     "remove_nonce"       — remove CSP only if it uses nonces
 #                     "remove_all"         — always remove CSP entirely
@@ -145,16 +139,11 @@ scripts = ["example"]
 # -----------------------------------------------------------------------------
 
 [[modify_response]]
-domain = "github.com"
+domain = "www.google.com"
 csp = "remove_nonce"
 remove_headers = ["x-frame-options", "strict-transport-security"]
 add_headers = { "x-dope" = "injected" }
 inject_at = "body_end"
-
-[[modify_response]]
-domain = "www.google.com"
-csp = "remove_nonce"
-
 
 # -----------------------------------------------------------------------------
 # REQUEST MODIFIERS
@@ -163,13 +152,13 @@ csp = "remove_nonce"
 # Only the first matching [[modify_request]] entry is applied per domain.
 #
 # Fields:
-#   domain          — domain to match (required)
+#   domain          — domain to match (required, use "*" to match all domains)
 #   remove_headers  — list of request headers to strip (optional)
 #   add_headers     — map of headers to inject into the request (optional)
 # -----------------------------------------------------------------------------
 
 [[modify_request]]
-domain = "github.com"
+domain = "www.google.com"
 add_headers = { "x-forwarded-proto" = "https" }
 "#;
 
