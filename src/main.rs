@@ -16,6 +16,7 @@ use tracing::*;
 use tracing_appender;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
+mod charset;
 mod config;
 mod handler;
 mod inject;

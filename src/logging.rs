@@ -92,8 +92,8 @@ pub fn log_response(
         .unwrap_or("-");
 
     let body_preview = if body.len() > 100 {
-        let start = &body[..40];
-        let end = &body[body.len() - 40..];
+        let start: String = body.chars().take(40).collect();
+        let end: String = body.chars().rev().take(40).collect::<Vec<_>>().into_iter().rev().collect();
         format!("{} ... {}", start, end)
     } else {
         body.to_string()

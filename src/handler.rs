@@ -21,7 +21,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tracing::*;
 
-use crate::{config, inject, logging, modify};
+use crate::{charset, config, inject, logging, modify};
 
 /* --- Types ----------------------------------------------------------------- */
 
@@ -192,7 +192,11 @@ impl HttpHandler for TrafficHandler {
             }
         }
 
-        let mut html = String::from_utf8_lossy(&decoded_bytes).into_owned();
+        let content_type = parts
+            .headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok());
+        let mut html = charset::decode_body(&decoded_bytes, content_type);
 
         /* --- Domain matching and modification ------------------------------ */
 
@@ -216,6 +220,14 @@ impl HttpHandler for TrafficHandler {
 
         parts.headers.remove(header::CONTENT_ENCODING);
         parts.headers.remove(header::CONTENT_LENGTH);
+
+        if let Some(ct) = parts.headers.get_mut(header::CONTENT_TYPE) {
+            if let Ok(val) = ct.to_str() {
+                let base = val.split(';').next().unwrap_or(val).trim();
+                *ct = header::HeaderValue::from_str(&format!("{}; charset=utf-8", base))
+                    .expect("Content-Type base is valid ASCII");
+            }
+        }
 
         let response = Response::from_parts(parts, Body::from(html.clone()));
 
