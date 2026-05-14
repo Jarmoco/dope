@@ -5,65 +5,65 @@
 
 :root {
   /* Brand & Primary */
-  --color-brand: #e94560;
+  --color-brand: #45b0e9;
   --color-primary: #1a1a2e;
   --color-primary-hover: #16213e;
 
   /* Backgrounds */
-  --color-bg-main: #f5f5f5;
-  --color-bg-card: #ffffff;
-  --color-bg-header: #f9f9f9;
-  --color-bg-code: #f9f9f9;
-  --color-bg-hover: #fafafa;
+  --color-bg-main: #1b1b1b;
+  --color-bg-card: #272727;
+  --color-bg-header: #5f5f5f;
+  --color-bg-code: rgba(249, 249, 249, 0.12);
+  --color-bg-hover: #6e6e6e;
 
   /* Text */
-  --color-text-main: #333333;
-  --color-text-heading: #555555;
-  --color-text-muted: #666666;
-  --color-text-subtle: #888888;
-  --color-text-faint: #999999;
+  --color-text-main: #e8e8e8;
+  --color-text-heading: #ffffff;
+  --color-text-muted: #dcdcdc;
+  --color-text-subtle: #dcdcdc;
+  --color-text-faint: #dcdcdc;
 
   /* Nav */
-  --color-nav-bg: #1a1a2e;
+  --color-nav-bg: #303030;
   --color-nav-text: #eeeeee;
   --color-nav-link: #cccccc;
   --color-nav-link-hover: #ffffff;
 
   /* Borders */
   --color-border-light: #eeeeee;
-  --color-border: #dddddd;
+  --color-border: #3f3f3f;
   --color-border-focus: #1a1a2e;
 
   /* Badge: 2xx Success */
-  --color-badge-2xx-bg: #d4edda;
-  --color-badge-2xx-text: #155724;
+  --color-badge-2xx-bg: #40b35a;
+  --color-badge-2xx-text: #e8ffed;
 
   /* Badge: 3xx Redirect */
-  --color-badge-3xx-bg: #cce5ff;
-  --color-badge-3xx-text: #004085;
+  --color-badge-3xx-bg: #45b0e9;
+  --color-badge-3xx-text: #e8fffc;
 
   /* Badge: 4xx Client Error */
-  --color-badge-4xx-bg: #fff3cd;
-  --color-badge-4xx-text: #856404;
+  --color-badge-4xx-bg: #c54451;
+  --color-badge-4xx-text: #ffb1b1;
 
   /* Badge: 5xx Server Error */
-  --color-badge-5xx-bg: #f8d7da;
-  --color-badge-5xx-text: #721c24;
+  --color-badge-5xx-bg: #c54451;
+  --color-badge-5xx-text: #ffb1b1;
 
   /* Badge: Request */
-  --color-badge-req-bg: #e2e3f5;
-  --color-badge-req-text: #383d9e;
+  --color-badge-req-bg: #383d9e;
+  --color-badge-req-text: #e8f0ff;
 
   /* Badge: Error */
-  --color-badge-err-bg: #f8d7da;
-  --color-badge-err-text: #721c24;
+  --color-badge-err-bg: #ee293d;
+  --color-badge-err-text: #ffb1b1;
 
   /* Buttons */
-  --color-btn-primary: #1a1a2e;
-  --color-btn-primary-hover: #16213e;
-  --color-btn-danger: #e94560;
-  --color-btn-danger-hover: #d63851;
-  --color-btn-secondary: #eeeeee;
+  --color-btn-primary: #c4c4c4;
+  --color-btn-primary-hover: #e6e6e6;
+  --color-btn-danger: #e94545;
+  --color-btn-danger-hover: #af4c4c;
+  --color-btn-secondary: #9f9f9f;
 }
 
 * {
@@ -85,7 +85,7 @@ nav {
   padding: 0 24px;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 12px;
   height: 48px;
 }
 
@@ -99,7 +99,7 @@ nav a {
   color: var(--color-nav-link);
   text-decoration: none;
   font-size: 13px;
-  padding: 4px 8px;
+  padding: 8px 16px;
   border-radius: 4px;
 }
 
@@ -110,7 +110,7 @@ nav a.active {
 }
 
 #app {
-  max-width: 1100px;
+  max-width: 98vw;
   margin: 0 auto;
   padding: 24px;
 }
@@ -165,7 +165,6 @@ th {
   background: var(--color-bg-header);
   font-weight: 600;
   color: var(--color-text-heading);
-  border-bottom: 1px solid var(--color-border-light);
 }
 
 td {
@@ -242,6 +241,8 @@ pre {
   border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 13px;
+  background: var(--color-bg-card);
+  color: var(--color-text-main);
 }
 
 .filters input:focus,
@@ -260,7 +261,7 @@ pre {
 
 .btn-primary {
   background: var(--color-btn-primary);
-  color: #ffffff;
+  color: var(--color-bg-card);
 }
 
 .btn-primary:hover {
@@ -277,7 +278,7 @@ pre {
 }
 
 .btn-sm {
-  padding: 4px 10px;
+  padding: 8px 14px;
   font-size: 12px;
 }
 
@@ -302,7 +303,7 @@ pre {
 .config-section h3 {
   font-size: 15px;
   margin-bottom: 12px;
-  color: var(--color-primary);
+  color: var(--color-text-heading);
 }
 
 .config-row {
@@ -331,6 +332,8 @@ pre {
   font-size: 13px;
   flex: 1;
   min-width: 100px;
+  background: var(--color-bg-card);
+  color: var(--color-text-main);
 }
 
 .config-row input[type="checkbox"] {
@@ -360,7 +363,6 @@ pre {
 }
 
 .rule-card {
-  border: 1px solid var(--color-border-light);
   border-radius: 6px;
   padding: 12px;
   margin-bottom: 8px;
@@ -417,7 +419,7 @@ pre {
 }
 
 .refresh-toggle.active {
-  color: var(--color-primary);
+  color: var(--color-text-main);
   font-weight: 600;
 }
 

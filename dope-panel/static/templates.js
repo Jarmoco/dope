@@ -30,13 +30,15 @@ T.activityTable = (rows) => `
 T.activityRow = (ts, typeBadge, details) =>
   `<tr><td>${ts}</td><td>${typeBadge}</td><td>${details}</td></tr>`;
 
-T.combinedRow = (ts, method, host, status, contentType, duration, detailsExpanded) => `
+T.combinedRow = (ts, method, host, status, respDetails, detailsExpanded) => `
   <tr class="combined-row" onclick="toggleCombined(this)" style="cursor:pointer">
     <td>${ts}</td>
     <td><span class="badge badge-request">${method}</span></td>
-    <td>${host} <span class="arrow">==></span> <span class="badge badge-${Math.floor(status / 100)}xx">${status}</span> <span class="meta">${contentType || ''}</span> <span class="duration">${duration}ms</span></td>
+    <td>${host}</td>
+    <td><span class="badge badge-${Math.floor(status / 100)}xx">${status}</span></td>
+    <td>${respDetails}</td>
   </tr>
-  <tr class="combined-details" style="display:none"><td colspan="3">${detailsExpanded}</td></tr>
+  <tr class="combined-details" style="display:none"><td colspan="5">${detailsExpanded}</td></tr>
 `;
 
 T.logsPage = `
@@ -59,7 +61,7 @@ T.logsPage = `
 
 T.logTable = (rows) => `
   <table>
-    <thead><tr><th>Time</th><th>Type</th><th>Details</th></tr></thead>
+    <thead><tr><th>Time</th><th>Method</th><th>Host</th><th>Status</th><th>Response</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
 `;

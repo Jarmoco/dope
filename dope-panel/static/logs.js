@@ -92,6 +92,10 @@ function renderLogTable() {
     let contentType = resp ? resp.content_type : '';
     let duration = resp && req ? Math.max(1, resp.ts - req.ts) : '-';
 
+    let respDetails = '';
+    if (contentType) respDetails += `<span class="meta">${contentType}</span> `;
+    if (duration !== '-') respDetails += `<span class="duration">${duration}ms</span>`;
+
     let detailsExpanded = '';
     if (req) {
       detailsExpanded += `<div class="detail-section"><h4>Request</h4><pre>${JSON.stringify({method:req.method, uri:req.uri, host:req.host, user_agent:req.user_agent, accept:req.accept}, null, 2)}</pre></div>`;
@@ -103,7 +107,7 @@ function renderLogTable() {
       detailsExpanded += `<div class="detail-section"><h4>Error</h4><pre>${JSON.stringify({client_addr:err.client_addr, error:err.error}, null, 2)}</pre></div>`;
     }
 
-    return T.combinedRow(ts, method, hostVal, status, contentType, duration, detailsExpanded);
+    return T.combinedRow(ts, method, hostVal, status, respDetails, detailsExpanded);
   }).join('');
   container.innerHTML = T.logTable(rows);
 }
@@ -144,7 +148,11 @@ function renderActivityTable(container, entries) {
     let contentType = resp ? resp.content_type : '';
     let duration = resp && req ? Math.max(1, resp.ts - req.ts) : '-';
 
-    return T.combinedRow(ts, method, hostVal, status, contentType, duration, '');
+    let respDetails = '';
+    if (contentType) respDetails += `<span class="meta">${contentType}</span> `;
+    if (duration !== '-') respDetails += `<span class="duration">${duration}ms</span>`;
+
+    return T.combinedRow(ts, method, hostVal, status, respDetails, '');
   }).join('');
   container.innerHTML = T.activityTable(rows);
 }
