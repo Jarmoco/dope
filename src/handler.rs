@@ -12,11 +12,11 @@ use tokio_util::io::StreamReader;
 use hudsucker::{
     Body, HttpContext,
     futures::TryStreamExt,
-    hyper::{Request, Response, StatusCode, header},
+    hyper::{Method, Request, Response, StatusCode, header},
     tokio_tungstenite::tungstenite::Message,
     HttpHandler, RequestOrResponse, WebSocketContext, WebSocketHandler,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tracing::*;
@@ -26,7 +26,7 @@ use crate::{config, inject, logging, modify};
 
 #[derive(Clone)]
 pub struct TrafficHandler {
-    pub pending_urls: Arc<Mutex<HashMap<SocketAddr, String>>>,
+    pub pending_urls: Arc<Mutex<HashMap<SocketAddr, VecDeque<String>>>>,
 }
 
 impl TrafficHandler {
@@ -45,6 +45,9 @@ fn extract_domain(full_url: &str) -> String {
         .or_else(|| full_url.strip_prefix("http://"))
         .and_then(|rest| rest.split('/').next())
         .unwrap_or(full_url)
+        .split(':')
+        .next()
+        .unwrap_or("")
         .to_string()
 }
 
@@ -76,10 +79,16 @@ impl HttpHandler for TrafficHandler {
 
         logging::log_request(req.method(), req.uri(), req.headers(), &host);
 
+        if req.method() == Method::CONNECT {
+            return req.into();
+        }
+
         self.pending_urls
             .lock()
             .unwrap()
-            .insert(ctx.client_addr, full_uri);
+            .entry(ctx.client_addr)
+            .or_default()
+            .push_back(full_uri);
 
         let cfg = config::load_config();
         if let Some(modifier_config) = cfg.get_request_modifiers(&host) {
@@ -161,9 +170,12 @@ impl HttpHandler for TrafficHandler {
             .pending_urls
             .lock()
             .unwrap()
-            .remove(&ctx.client_addr)
+            .get_mut(&ctx.client_addr)
+            .and_then(|queue| queue.pop_front())
             .unwrap_or_default();
         let domain = extract_domain(&full_url);
+
+        info!("Response for URL: {} → domain: {}", full_url, domain);
 
         if !domain.is_empty() {
             let cfg = config::load_config();

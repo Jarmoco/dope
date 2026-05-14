@@ -39,6 +39,61 @@ fn print_help() {
     println!("                   Default: info");
 }
 
+/* --- Config Summary -------------------------------------------------------- */
+
+fn print_config_summary(cfg: &config::Config) {
+    info!("----------");
+    info!("Target domains:");
+
+    if let Some(scripts) = &cfg.scripts {
+        for rule in scripts {
+            let list = rule
+                .scripts
+                .iter()
+                .map(|s| format!("\"{}\"", s))
+                .collect::<Vec<_>>()
+                .join(", ");
+            info!("- {} [{}]", rule.domain, list);
+        }
+    }
+
+    if let Some(modifiers) = &cfg.modify_response {
+        for m in modifiers {
+            info!("  modify_response on {}:", m.domain);
+            if let Some(ref csp) = m.csp {
+                info!("    csp: {}", csp);
+            }
+            if let Some(ref remove) = m.remove_headers {
+                info!("    remove_headers: [{}]", remove.join(", "));
+            }
+            if let Some(ref add) = m.add_headers {
+                for (k, v) in add {
+                    info!("    add_header: {} = {}", k, v);
+                }
+            }
+            if let Some(ref pos) = m.inject_at {
+                info!("    inject_at: {}", pos);
+            }
+        }
+    }
+
+    if let Some(modifiers) = &cfg.modify_request {
+        for m in modifiers {
+            info!("  modify_request on {}:", m.domain);
+            if let Some(ref remove) = m.remove_headers {
+                info!("    remove_headers: [{}]", remove.join(", "));
+            }
+            if let Some(ref add) = m.add_headers {
+                for (k, v) in add {
+                    info!("    add_header: {} = {}", k, v);
+                }
+            }
+        }
+    }
+
+    info!("----------");
+}
+
 /* --- Shutdown -------------------------------------------------------------- */
 
 async fn shutdown_signal() {
@@ -125,6 +180,8 @@ async fn main() {
 
     let cfg = config::load_config();
     let port = cfg.server.port;
+
+    print_config_summary(&cfg);
 
     let proxy = Proxy::builder()
         .with_addr(SocketAddr::from(([127, 0, 0, 1], port)))
