@@ -22,7 +22,7 @@ T.empty = (msg) => `<div class="empty">${msg}</div>`;
 
 T.activityTable = (rows) => `
   <table>
-    <thead><tr><th>Time</th><th>Type</th><th>Details</th></tr></thead>
+    <thead><tr><th>Time</th><th>Method</th><th>Host</th><th>Status</th><th>Response</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
 `;
@@ -44,14 +44,7 @@ T.combinedRow = (ts, method, host, status, respDetails, detailsExpanded) => `
 T.logsPage = `
   <h2>Logs</h2>
   <div class="filters">
-    <input type="text" id="filter-host" placeholder="Host..." oninput="renderLogTable()">
-    <select id="filter-type" onchange="renderLogTable()">
-      <option value="">All types</option>
-      <option value="request">Request</option>
-      <option value="response">Response</option>
-      <option value="error">Error</option>
-    </select>
-    <input type="text" id="filter-search" placeholder="Search..." oninput="renderLogTable()" style="flex:1">
+    <input type="text" id="filter-search" placeholder="Search by host, method, status, content type..." oninput="renderLogTable()" style="flex:1">
     <label class="refresh-toggle active" id="refresh-label">
       <input type="checkbox" checked onchange="toggleRefresh(this.checked)"> Auto-refresh
     </label>

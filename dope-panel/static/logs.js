@@ -66,21 +66,30 @@ function groupByReqId(entries) {
 /* --- Log Table Rendering -------------------------------------------------- */
 
 function renderLogTable() {
-  const host = (document.getElementById('filter-host')?.value || '').toLowerCase();
-  const type = document.getElementById('filter-type')?.value || '';
   const search = (document.getElementById('filter-search')?.value || '').toLowerCase();
   const container = document.getElementById('log-table');
   if (!container) return;
 
   let entries = window.dope.logsCache;
-  if (host) entries = entries.filter(e => (e.host || '').toLowerCase().includes(host));
-  if (type) entries = entries.filter(e => e.type === type);
-  if (search) entries = entries.filter(e => JSON.stringify(e).toLowerCase().includes(search));
+  if (search) {
+    entries = entries.filter(e => JSON.stringify(e).toLowerCase().includes(search));
+  }
 
   if (entries.length === 0) { container.innerHTML = T.empty('No matching entries.'); return; }
 
   const groups = groupByReqId(entries);
-  const rows = groups.map(g => {
+  const filtered = search ? groups.filter(g => {
+    const q = search;
+    const req = g.request;
+    const resp = g.response;
+    const err = g.error;
+    const host = req ? req.host.toLowerCase() : (err ? err.client_addr.toLowerCase() : '');
+    const method = req ? req.method.toLowerCase() : '';
+    const status = resp ? String(resp.status) : '';
+    const ct = resp ? (resp.content_type || '').toLowerCase() : '';
+    return host.includes(q) || method.includes(q) || status.includes(q) || ct.includes(q);
+  }) : groups;
+  const rows = filtered.map(g => {
     const ts = new Date(g.ts).toLocaleTimeString();
     const req = g.request;
     const resp = g.response;
