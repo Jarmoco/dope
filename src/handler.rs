@@ -39,6 +39,14 @@ impl TrafficHandler {
 
 /* --- Helpers --------------------------------------------------------------- */
 
+fn is_websocket_upgrade(req: &Request<Body>) -> bool {
+    req.headers()
+        .get(header::UPGRADE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("websocket"))
+        .unwrap_or(false)
+}
+
 fn extract_domain(full_url: &str) -> String {
     full_url
         .strip_prefix("https://")
@@ -89,6 +97,11 @@ impl HttpHandler for TrafficHandler {
             .entry(ctx.client_addr)
             .or_default()
             .push_back(full_uri);
+
+        if is_websocket_upgrade(&req) {
+            req.headers_mut().remove("sec-websocket-extensions");
+            req.headers_mut().remove("sec-websocket-protocol");
+        }
 
         let cfg = config::load_config();
         if let Some(modifier_config) = cfg.get_request_modifiers(&host) {
