@@ -7,7 +7,7 @@ use hudsucker::hyper::http::HeaderName;
 use hudsucker::hyper::HeaderMap;
 use tracing::*;
 
-use crate::config::{RequestModifier, ResponseModifier};
+use dope_core::{RequestModifier, ResponseModifier};
 
 /* --- Response Modifiers ---------------------------------------------------- */
 

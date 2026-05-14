@@ -362,17 +362,25 @@ name = "dope"
 version = "0.1.2"
 dependencies = [
  "async-compression",
+ "dope-core",
  "http-body-util",
  "hudsucker",
- "serde",
- "serde_json",
  "tokio",
  "tokio-util",
- "toml",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "dope-core"
+version = "0.1.2"
+dependencies = [
+ "serde",
+ "serde_json",
+ "toml",
+ "tracing",
 ]
 
 [[package]]

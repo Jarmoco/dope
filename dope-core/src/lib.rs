@@ -1,13 +1,47 @@
 /* -----------------------------------------------------------------------------
- * config.rs
- * Configuration types and TOML loading for domains, scripts, and modifiers.
+ * dope-core/src/lib.rs
+ * Shared types, config I/O, and log I/O for dope proxy and dope-panel.
  * -------------------------------------------------------------------------- */
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::*;
 
-/* --- Types ----------------------------------------------------------------- */
+/* --- Log Types ------------------------------------------------------------- */
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum LogEntry {
+    #[serde(rename = "request")]
+    Request {
+        req_id: String,
+        ts: u64,
+        method: String,
+        uri: String,
+        host: String,
+        user_agent: String,
+        accept: String,
+    },
+    #[serde(rename = "response")]
+    Response {
+        req_id: String,
+        ts: u64,
+        status: u16,
+        content_type: String,
+        body_preview: String,
+    },
+    #[serde(rename = "error")]
+    Error {
+        req_id: String,
+        ts: u64,
+        client_addr: String,
+        error: String,
+    },
+}
+
+/* --- Config Types ---------------------------------------------------------- */
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -45,7 +79,7 @@ pub struct RequestModifier {
     pub add_headers: Option<HashMap<String, String>>,
 }
 
-/* --- Lookups --------------------------------------------------------------- */
+/* --- Config Lookups -------------------------------------------------------- */
 
 impl Config {
     pub fn get_scripts_for_domain(&self, domain: &str) -> Vec<String> {
@@ -73,7 +107,17 @@ impl Config {
     }
 }
 
-/* --- Default Config -------------------------------------------------------- */
+/* --- Paths ----------------------------------------------------------------- */
+
+pub fn config_path() -> PathBuf {
+    PathBuf::from("config.toml")
+}
+
+pub fn trace_path() -> PathBuf {
+    PathBuf::from("logs/dope-traces.jsonl")
+}
+
+/* --- Config I/O ------------------------------------------------------------ */
 
 pub fn create_default_config() -> Result<(), Box<dyn std::error::Error>> {
     let config = r#"# -----------------------------------------------------------------------------
@@ -162,17 +206,13 @@ domain = "www.google.com"
 add_headers = { "x-forwarded-proto" = "https" }
 "#;
 
-    std::fs::write("config.toml", config)?;
-
+    std::fs::write(config_path(), config)?;
     Ok(())
 }
 
-/* --- Load ------------------------------------------------------------------ */
-
 pub fn load_config() -> Config {
-    if !std::path::Path::new("config.toml").exists()
-        && let Err(e) = create_default_config()
-    {
+    let path = config_path();
+    if !path.exists() && let Err(e) = create_default_config() {
         error!("Failed to create default config: {}", e);
         return Config {
             server: ServerConfig { port: 8080, pause: None },
@@ -182,10 +222,10 @@ pub fn load_config() -> Config {
         };
     }
 
-    let content = match std::fs::read_to_string("config.toml") {
+    let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => {
-            error!("Failed to read config.toml: {}", e);
+            error!("Failed to read {}: {}", path.display(), e);
             return Config {
                 server: ServerConfig { port: 8080, pause: None },
                 scripts: None,
@@ -198,7 +238,7 @@ pub fn load_config() -> Config {
     match toml::from_str(&content) {
         Ok(config) => config,
         Err(e) => {
-            error!("Failed to parse config.toml: {}", e);
+            error!("Failed to parse {}: {}", path.display(), e);
             Config {
                 server: ServerConfig { port: 8080, pause: None },
                 scripts: None,
@@ -206,5 +246,47 @@ pub fn load_config() -> Config {
                 modify_request: None,
             }
         }
+    }
+}
+
+pub fn save_config(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    let toml_str = toml::to_string_pretty(config)?;
+    std::fs::write(config_path(), toml_str)?;
+    Ok(())
+}
+
+/* --- Log I/O --------------------------------------------------------------- */
+
+pub fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+fn ensure_log_directory() -> Result<(), std::io::Error> {
+    let path = trace_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    Ok(())
+}
+
+pub fn append_entry(value: &LogEntry) {
+    if let Err(e) = ensure_log_directory() {
+        error!("Failed to create log directory: {}", e);
+        return;
+    }
+    if let Err(e) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(trace_path())
+        .and_then(|mut file| {
+            let line = serde_json::to_string(value).unwrap_or_default();
+            use std::io::Write;
+            writeln!(file, "{}", line)
+        })
+    {
+        error!("Failed to write log file: {}", e);
     }
 }

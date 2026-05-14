@@ -6,7 +6,7 @@
 
 use tracing::*;
 
-use crate::config::Config;
+use dope_core::Config;
 
 /* --- Inject Scripts -------------------------------------------------------- */
 
@@ -33,7 +33,7 @@ pub fn inject_scripts(html: &mut String, domain: &str, config: &Config) {
         };
 
         let tag = if script_content.contains("GM_") {
-            let gm_polyfill = include_str!("../lib/gm_polyfill.js");
+            let gm_polyfill = include_str!("../../lib/gm_polyfill.js");
             format!(
                 "<script>{}</script><script>{}</script>",
                 gm_polyfill, script_content

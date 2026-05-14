@@ -21,7 +21,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tracing::*;
 
-use crate::{charset, config, inject, logging, modify};
+use crate::{charset, inject, logging, modify};
 
 /* --- Types ----------------------------------------------------------------- */
 
@@ -110,7 +110,7 @@ impl HttpHandler for TrafficHandler {
             req.headers_mut().remove("sec-websocket-protocol");
         }
 
-        let cfg = config::load_config();
+        let cfg = dope_core::load_config();
         if let Some(modifier_config) = cfg.get_request_modifiers(&host) {
             modify::apply_request_modifiers(req.headers_mut(), modifier_config);
         }
@@ -203,7 +203,7 @@ impl HttpHandler for TrafficHandler {
         info!("Response for URL: {} → domain: {}", full_url, domain);
 
         if !domain.is_empty() {
-            let cfg = config::load_config();
+            let cfg = dope_core::load_config();
 
             if cfg.server.pause.unwrap_or(false) {
                 info!("Paused — skipping injection and manipulation for {}", domain);

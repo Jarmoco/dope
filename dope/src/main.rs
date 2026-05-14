@@ -17,7 +17,6 @@ use tracing_appender;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
 mod charset;
-mod config;
 mod handler;
 mod inject;
 mod logging;
@@ -43,7 +42,7 @@ fn print_help() {
 
 /* --- Config Summary -------------------------------------------------------- */
 
-fn print_config_summary(cfg: &config::Config) {
+fn print_config_summary(cfg: &dope_core::Config) {
     info!("----------");
     info!("Target domains:");
 
@@ -191,7 +190,7 @@ async fn main() {
 
     let traffic_handler = handler::TrafficHandler::new();
 
-    let cfg = config::load_config();
+    let cfg = dope_core::load_config();
     let port = cfg.server.port;
 
     print_config_summary(&cfg);
