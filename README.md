@@ -1,6 +1,7 @@
 # DOPE
 
-DOPE is a **Man-in-the-Middle proxy** that **injects userscripts** ([ViolentMonkey](https://violentmonkey.github.io/) / [GreaseMonkey](https://www.greasespot.net/) format) into web pages. It is designed to be used as a local proxy server that intercepts HTTP and HTTPS traffic, and injects userscripts into the responses.
+DOPE is a **Man-in-the-Middle proxy** that **injects userscripts** ([ViolentMonkey](https://violentmonkey.github.io/) / [GreaseMonkey](https://www.greasespot.net/) format) into web pages. 
+It is capable of intercepting HTTP and HTTPS traffic (with a custom CA), and can also tweak headers in requests and responses.
 
 ## Quick Start
 

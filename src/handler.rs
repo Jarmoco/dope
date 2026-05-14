@@ -22,11 +22,17 @@ use std::sync::{Arc, Mutex};
 use tracing::*;
 
 use crate::{config, inject, logging, modify};
+
 /* --- Types ----------------------------------------------------------------- */
+
+struct PendingRequest {
+    url: String,
+    req_id: String,
+}
 
 #[derive(Clone)]
 pub struct TrafficHandler {
-    pub pending_urls: Arc<Mutex<HashMap<SocketAddr, VecDeque<String>>>>,
+    pending_urls: Arc<Mutex<HashMap<SocketAddr, VecDeque<PendingRequest>>>>,
 }
 
 impl TrafficHandler {
@@ -85,7 +91,8 @@ impl HttpHandler for TrafficHandler {
             format!("https://{}{}", host, uri_str)
         };
 
-        logging::log_request(req.method(), req.uri(), req.headers(), &host);
+        let req_id = uuid::Uuid::new_v4().to_string();
+        logging::log_request(&req_id, req.method(), req.uri(), req.headers(), &host);
 
         if req.method() == Method::CONNECT {
             return req.into();
@@ -96,7 +103,7 @@ impl HttpHandler for TrafficHandler {
             .unwrap()
             .entry(ctx.client_addr)
             .or_default()
-            .push_back(full_uri);
+            .push_back(PendingRequest { url: full_uri, req_id });
 
         if is_websocket_upgrade(&req) {
             req.headers_mut().remove("sec-websocket-extensions");
@@ -117,13 +124,23 @@ impl HttpHandler for TrafficHandler {
         ctx: &HttpContext,
         res: Response<Body>,
     ) -> Response<Body> {
+        let (req_id, full_url) = self
+            .pending_urls
+            .lock()
+            .unwrap()
+            .get_mut(&ctx.client_addr)
+            .and_then(|queue| queue.pop_front())
+            .map_or(("-".to_string(), String::new()), |p| (p.req_id, p.url));
+
+        let domain = extract_domain(&full_url);
+
         let is_html = res
             .headers()
             .get(header::CONTENT_TYPE)
             .is_some_and(|v| v.to_str().unwrap_or("").contains("text/html"));
 
         if !is_html {
-            logging::log_response(res.status(), res.headers(), "");
+            logging::log_response(&req_id, res.status(), res.headers(), "");
             return res;
         }
 
@@ -179,15 +196,6 @@ impl HttpHandler for TrafficHandler {
 
         /* --- Domain matching and modification ------------------------------ */
 
-        let full_url = self
-            .pending_urls
-            .lock()
-            .unwrap()
-            .get_mut(&ctx.client_addr)
-            .and_then(|queue| queue.pop_front())
-            .unwrap_or_default();
-        let domain = extract_domain(&full_url);
-
         info!("Response for URL: {} → domain: {}", full_url, domain);
 
         if !domain.is_empty() {
@@ -211,7 +219,7 @@ impl HttpHandler for TrafficHandler {
 
         let response = Response::from_parts(parts, Body::from(html.clone()));
 
-        logging::log_response(response.status(), response.headers(), &html);
+        logging::log_response(&req_id, response.status(), response.headers(), &html);
 
         response
     }
@@ -224,7 +232,17 @@ impl HttpHandler for TrafficHandler {
         err: hudsucker::hyper_util::client::legacy::Error,
     ) -> Response<Body> {
         error!("Proxy error: {}", err);
-        logging::log_proxy_error(ctx, &err);
+
+        let req_id = self
+            .pending_urls
+            .lock()
+            .unwrap()
+            .get_mut(&ctx.client_addr)
+            .and_then(|queue| queue.pop_front())
+            .map_or_else(|| uuid::Uuid::new_v4().to_string(), |p| p.req_id);
+
+        logging::log_proxy_error(&req_id, ctx, &err);
+
         Response::builder()
             .status(StatusCode::BAD_GATEWAY)
             .body(Body::empty())
