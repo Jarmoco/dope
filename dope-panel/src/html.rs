@@ -41,23 +41,6 @@ pub fn stats_cards(total: usize, hosts: usize, errors: usize) -> String {
     )
 }
 
-pub fn activity_table(entries: &[LogEntry]) -> String {
-    if entries.is_empty() {
-        return render(template("empty-state.html"), &[("message", "No entries yet.")]);
-    }
-    let rows = activity_rows(entries);
-    render(template("activity-table.html"), &[("rows", &rows)])
-}
-
-fn activity_rows(entries: &[LogEntry]) -> String {
-    let groups = group_log_entries(entries);
-    let top: Vec<_> = groups.iter().take(20).collect();
-    top.iter()
-        .map(|g| combined_row(g, false))
-        .collect::<Vec<_>>()
-        .join("")
-}
-
 /* --- Logs ------------------------------------------------------------------ */
 
 pub fn logs_page() -> String {

@@ -45,7 +45,6 @@ async fn main() {
         .route("/config", get(serve_config))
         // HTML data routes
         .route("/api/html/dashboard-stats", get(serve_dashboard_stats))
-        .route("/api/html/activity", get(serve_activity))
         .route("/api/html/logs", get(serve_log_table))
         // Server config
         .route(
@@ -180,9 +179,15 @@ async fn serve_htmx() -> impl IntoResponse {
 
 /* --- Page Routes ----------------------------------------------------------- */
 
+async fn count_log_entries() -> usize {
+    tokio::task::spawn_blocking(dope_core::log_entry_count)
+        .await
+        .unwrap_or(0)
+}
+
 async fn serve_dashboard(headers: HeaderMap) -> Response {
-    let entries = load_log_entries(0, 200).await;
-    let total = entries.len();
+    let total = count_log_entries().await;
+    let entries = load_log_entries(0, 5000).await;
     let hosts = entries
         .iter()
         .filter_map(|e| match e {
@@ -226,8 +231,8 @@ async fn serve_config(headers: HeaderMap) -> Response {
 /* --- HTML Data Routes ------------------------------------------------------ */
 
 async fn serve_dashboard_stats() -> impl IntoResponse {
-    let entries = load_log_entries(0, 200).await;
-    let total = entries.len();
+    let total = count_log_entries().await;
+    let entries = load_log_entries(0, 5000).await;
     let hosts = entries
         .iter()
         .filter_map(|e| match e {
@@ -244,11 +249,6 @@ async fn serve_dashboard_stats() -> impl IntoResponse {
         })
         .count();
     Html(html::stats_cards(total, hosts, errors))
-}
-
-async fn serve_activity() -> impl IntoResponse {
-    let entries = load_log_entries(0, 20).await;
-    Html(html::activity_table(&entries))
 }
 
 /* --- JSON API (unchanged) -------------------------------------------------- */
