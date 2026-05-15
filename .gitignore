@@ -2,4 +2,5 @@ ca/
 target/
 config.toml
 logs/
+dist/
 GD.md
