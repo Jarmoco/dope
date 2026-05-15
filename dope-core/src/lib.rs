@@ -168,6 +168,24 @@ pub fn trace_path() -> PathBuf {
     PathBuf::from("logs/dope-traces.jsonl")
 }
 
+pub fn list_available_scripts() -> Vec<String> {
+    let path = std::path::Path::new("scripts");
+    if !path.is_dir() {
+        return vec![];
+    }
+    let mut scripts: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if let Some(stripped) = name.strip_suffix(".user.js") {
+                scripts.push(stripped.to_string());
+            }
+        }
+    }
+    scripts.sort();
+    scripts
+}
+
 /* --- Config I/O ------------------------------------------------------------ */
 
 pub fn create_default_config() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,5 +1,5 @@
 <div class="header-pair config-row">
   <input type="text" value="{val}" placeholder="Header name"
-         hx-put="/api/html/config/domain/{domain_url}/{ty_lower}/remove-headers/{hi}" hx-trigger="change" hx-target="#domain-{domain_url}" hx-swap="outerHTML">
-  <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/domain/{domain_url}/{ty_lower}/remove-headers/{hi}" hx-target="#domain-{domain_url}" hx-swap="outerHTML">x</button>
+         hx-put="/api/html/config/domain/{domain_url}/{ty_lower}/remove-headers/{hi}" hx-trigger="change" hx-target="closest .domain-card" hx-swap="outerHTML">
+  <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/domain/{domain_url}/{ty_lower}/remove-headers/{hi}" hx-target="closest .domain-card" hx-swap="outerHTML">x</button>
 </div>

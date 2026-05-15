@@ -122,12 +122,8 @@ pub async fn remove_domain(Path(domain): Path<String>) -> impl IntoResponse {
 
 /* --- Domain Scripts -------------------------------------------------------- */
 
-pub async fn update_domain_scripts(
-    Path(domain): Path<String>,
-    Form(body): Form<HashMap<String, String>>,
-) -> impl IntoResponse {
+pub async fn add_domain_script(Path(domain): Path<String>) -> impl IntoResponse {
     let mut config = load_config().await;
-
     let idx = config
         .scripts
         .as_ref()
@@ -136,31 +132,16 @@ pub async fn update_domain_scripts(
     match idx {
         Some(idx) => {
             if let Some(rule) = config.scripts.as_mut().and_then(|rules| rules.get_mut(idx)) {
-                if let Some(scripts_val) = body.get("scripts") {
-                    rule.scripts = scripts_val
-                        .split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                }
+                rule.scripts.push(String::new());
             }
         }
         None => {
-            let scripts = body
-                .get("scripts")
-                .map(|v| {
-                    v.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect()
-                })
-                .unwrap_or_default();
             config
                 .scripts
                 .get_or_insert_with(Vec::new)
                 .push(dope_core::ScriptRule {
                     domain: domain.clone(),
-                    scripts,
+                    scripts: vec![String::new()],
                 });
         }
     }
@@ -168,7 +149,58 @@ pub async fn update_domain_scripts(
     save_config(&config).await;
     ok_html_with_toast(
         html::domain_card(&config, &domain, true),
-        "Scripts updated",
+        "Script added",
+    )
+}
+
+pub async fn update_domain_script(
+    Path((domain, idx)): Path<(String, usize)>,
+    Form(body): Form<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let mut config = load_config().await;
+    let rule_idx = config
+        .scripts
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(rule_idx) = rule_idx {
+        if let Some(rule) = config.scripts.as_mut().and_then(|rules| rules.get_mut(rule_idx)) {
+            if idx < rule.scripts.len() {
+                if let Some(name) = body.get("name") {
+                    rule.scripts[idx] = name.clone();
+                }
+            }
+        }
+    }
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Script updated",
+    )
+}
+
+pub async fn remove_domain_script(
+    Path((domain, idx)): Path<(String, usize)>,
+) -> impl IntoResponse {
+    let mut config = load_config().await;
+    let rule_idx = config
+        .scripts
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(rule_idx) = rule_idx {
+        if let Some(rule) = config.scripts.as_mut().and_then(|rules| rules.get_mut(rule_idx)) {
+            if idx < rule.scripts.len() {
+                rule.scripts.remove(idx);
+            }
+        }
+    }
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Script removed",
     )
 }
 

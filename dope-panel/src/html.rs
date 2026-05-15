@@ -400,7 +400,7 @@ pub fn domain_card(config: &Config, domain: &str, expanded: bool) -> String {
 
     let summary = build_domain_summary(script, response, request);
 
-    let scripts_val = script.map(|s| s.scripts.join(", ")).unwrap_or_default();
+    let script_entries = build_script_entries(domain, script.map(|s| &s.scripts[..]).unwrap_or(&[]));
     let csp_opts = csp_options(response.and_then(|r| r.csp.as_deref()));
     let inject_opts = inject_options(response.and_then(|r| r.inject_at.as_deref()));
 
@@ -428,7 +428,7 @@ pub fn domain_card(config: &Config, domain: &str, expanded: bool) -> String {
             ("toggle_icon", toggle_icon),
             ("body_display", body_display),
             ("summary", &summary),
-            ("scripts_val", &html_esc(&scripts_val)),
+            ("script_entries", &script_entries),
             ("csp_options", &csp_opts),
             ("inject_options", &inject_opts),
             ("response_remove_headers", &response_remove_headers),
@@ -496,6 +496,43 @@ fn build_domain_summary(
 }
 
 /* --- Config Shared Helpers ------------------------------------------------- */
+
+fn build_script_entries(domain: &str, scripts: &[String]) -> String {
+    if scripts.is_empty() {
+        return String::new();
+    }
+    scripts
+        .iter()
+        .enumerate()
+        .map(|(idx, name)| script_entry_row(domain, idx, name))
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn script_entry_row(domain: &str, idx: usize, current: &str) -> String {
+    let available = dope_core::list_available_scripts();
+    let options: String = available
+        .iter()
+        .map(|s| {
+            let selected = if s == current { " selected" } else { "" };
+            format!(
+                r##"        <option value="{}"{}>{}</option>"##,
+                html_esc(s),
+                selected,
+                html_esc(s)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    render(
+        template("script-entry.html"),
+        &[
+            ("domain_url", &urlencode(domain)),
+            ("idx", &idx.to_string()),
+            ("options", &options),
+        ],
+    )
+}
 
 fn csp_options(current: Option<&str>) -> String {
     render(

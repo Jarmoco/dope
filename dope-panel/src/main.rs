@@ -67,7 +67,15 @@ async fn main() {
         // Domain scripts
         .route(
             "/api/html/config/domain/:domain/scripts",
-            put(config_routes::update_domain_scripts),
+            post(config_routes::add_domain_script),
+        )
+        .route(
+            "/api/html/config/domain/:domain/scripts/:idx",
+            put(config_routes::update_domain_script),
+        )
+        .route(
+            "/api/html/config/domain/:domain/scripts/:idx",
+            delete(config_routes::remove_domain_script),
         )
         // Domain response modifiers
         .route(
