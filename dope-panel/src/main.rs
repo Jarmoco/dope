@@ -1,18 +1,24 @@
 /* -----------------------------------------------------------------------------
  * dope-panel/src/main.rs
- * Web admin panel for dope proxy — serves a Vanilla JS SPA with JSON API.
+ * Web admin panel for dope proxy — serves an HTMX-powered HTML UI.
  * -------------------------------------------------------------------------- */
+
+use std::collections::HashSet;
+use std::net::SocketAddr;
 
 use axum::{
     extract::Query,
-    http::StatusCode,
-    response::{Html, IntoResponse},
-    routing::{get},
+    http::{header, HeaderMap, StatusCode},
+    response::{Html, IntoResponse, Response},
+    routing::{delete, get, post, put},
     Json, Router,
 };
+use dope_core::{Config, LogEntry};
 use serde::Deserialize;
-use std::net::SocketAddr;
 use tracing::*;
+
+mod config_routes;
+mod html;
 
 /* --- Main ------------------------------------------------------------------ */
 
@@ -26,14 +32,122 @@ async fn main() {
         .init();
 
     let app = Router::new()
-        .route("/", get(serve_index))
+        // Static
         .route("/static/style.css", get(serve_style))
-        .route("/static/templates.js", get(serve_templates))
-        .route("/static/app.js", get(serve_app))
-        .route("/static/logs.js", get(serve_logs))
-        .route("/static/config.js", get(serve_config))
+        .route("/static/htmx.min.js", get(serve_htmx))
+        // JSON API (keep existing)
         .route("/api/config", get(get_config).put(update_config))
-        .route("/api/logs", get(get_logs));
+        .route("/api/logs", get(get_logs))
+        // Page routes
+        .route("/", get(serve_dashboard))
+        .route("/dashboard", get(serve_dashboard))
+        .route("/logs", get(serve_logs))
+        .route("/config", get(serve_config))
+        // HTML data routes
+        .route("/api/html/dashboard-stats", get(serve_dashboard_stats))
+        .route("/api/html/activity", get(serve_activity))
+        .route("/api/html/logs", get(serve_log_table))
+        // Config HTML routes
+        .route(
+            "/api/html/config/server/port",
+            put(config_routes::update_server_port),
+        )
+        .route(
+            "/api/html/config/server/pause",
+            put(config_routes::update_server_pause),
+        )
+        .route(
+            "/api/html/config/scripts",
+            post(config_routes::add_script_rule),
+        )
+        .route(
+            "/api/html/config/scripts/:idx",
+            delete(config_routes::remove_script_rule),
+        )
+        .route(
+            "/api/html/config/scripts/:idx",
+            put(config_routes::update_script_rule),
+        )
+        .route(
+            "/api/html/config/response",
+            post(config_routes::add_response_rule),
+        )
+        .route(
+            "/api/html/config/response/:idx",
+            delete(config_routes::remove_response_rule),
+        )
+        .route(
+            "/api/html/config/response/:idx",
+            put(config_routes::update_response_rule),
+        )
+        .route(
+            "/api/html/config/response/:idx/headers",
+            post(config_routes::add_response_header),
+        )
+        .route(
+            "/api/html/config/response/:idx/headers/:key",
+            delete(config_routes::remove_response_header),
+        )
+        .route(
+            "/api/html/config/response/:idx/headers/key",
+            put(config_routes::update_response_header_key),
+        )
+        .route(
+            "/api/html/config/response/:idx/headers/val",
+            put(config_routes::update_response_header_val),
+        )
+        .route(
+            "/api/html/config/response/:idx/remove-headers",
+            post(config_routes::add_response_remove_header),
+        )
+        .route(
+            "/api/html/config/response/:idx/remove-headers/:hi",
+            delete(config_routes::remove_response_remove_header),
+        )
+        .route(
+            "/api/html/config/response/:idx/remove-headers/:hi",
+            put(config_routes::update_response_remove_header),
+        )
+        .route(
+            "/api/html/config/request",
+            post(config_routes::add_request_rule),
+        )
+        .route(
+            "/api/html/config/request/:idx",
+            delete(config_routes::remove_request_rule),
+        )
+        .route(
+            "/api/html/config/request/:idx",
+            put(config_routes::update_request_rule),
+        )
+        .route(
+            "/api/html/config/request/:idx/headers",
+            post(config_routes::add_request_header),
+        )
+        .route(
+            "/api/html/config/request/:idx/headers/:key",
+            delete(config_routes::remove_request_header),
+        )
+        .route(
+            "/api/html/config/request/:idx/headers/key",
+            put(config_routes::update_request_header_key),
+        )
+        .route(
+            "/api/html/config/request/:idx/headers/val",
+            put(config_routes::update_request_header_val),
+        )
+        .route(
+            "/api/html/config/request/:idx/remove-headers",
+            post(config_routes::add_request_remove_header),
+        )
+        .route(
+            "/api/html/config/request/:idx/remove-headers/:hi",
+            delete(config_routes::remove_request_remove_header),
+        )
+        .route(
+            "/api/html/config/request/:idx/remove-headers/:hi",
+            put(config_routes::update_request_remove_header),
+        );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 9090));
     info!("dope-panel listening on http://{}", addr);
@@ -47,11 +161,24 @@ async fn main() {
         .expect("Server failed");
 }
 
-/* --- Index ----------------------------------------------------------------- */
+/* --- Helpers --------------------------------------------------------------- */
 
-async fn serve_index() -> Html<&'static str> {
-    Html(include_str!("../static/index.html"))
+fn page_or_fragment(headers: &HeaderMap, content: String) -> Response {
+    if headers.contains_key("hx-request") {
+        ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], content).into_response()
+    } else {
+        let full = html::page_shell(&content);
+        ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], full).into_response()
+    }
 }
+
+async fn load_log_entries(since: u64, limit: usize) -> Vec<LogEntry> {
+    tokio::task::spawn_blocking(move || dope_core::read_log_entries(since, limit))
+        .await
+        .unwrap_or_default()
+}
+
+/* --- Static ---------------------------------------------------------------- */
 
 async fn serve_style() -> impl IntoResponse {
     (
@@ -60,69 +187,87 @@ async fn serve_style() -> impl IntoResponse {
     )
 }
 
-async fn serve_templates() -> impl IntoResponse {
+async fn serve_htmx() -> impl IntoResponse {
     (
         [("content-type", "application/javascript")],
-        include_str!("../static/templates.js"),
+        include_str!("../static/htmx.min.js"),
     )
 }
 
-async fn serve_app() -> impl IntoResponse {
-    (
-        [("content-type", "application/javascript")],
-        include_str!("../static/app.js"),
-    )
+/* --- Page Routes ----------------------------------------------------------- */
+
+async fn serve_dashboard(headers: HeaderMap) -> Response {
+    let entries = load_log_entries(0, 200).await;
+    let total = entries.len();
+    let hosts = entries
+        .iter()
+        .filter_map(|e| match e {
+            LogEntry::Request { host, .. } => Some(host.as_str()),
+            _ => None,
+        })
+        .collect::<HashSet<_>>()
+        .len();
+    let errors = entries
+        .iter()
+        .filter(|e| {
+            matches!(e, LogEntry::Error { .. })
+                || matches!(e, LogEntry::Response { status, .. } if *status >= 500)
+        })
+        .count();
+    let content = html::dashboard_page(total, hosts, errors);
+    page_or_fragment(&headers, content)
 }
 
-async fn serve_logs() -> impl IntoResponse {
-    (
-        [("content-type", "application/javascript")],
-        include_str!("../static/logs.js"),
-    )
+async fn serve_logs(headers: HeaderMap) -> Response {
+    let content = html::logs_page();
+    page_or_fragment(&headers, content)
 }
 
-async fn serve_config() -> impl IntoResponse {
-    (
-        [("content-type", "application/javascript")],
-        include_str!("../static/config.js"),
-    )
-}
-
-/* --- Config Handlers ------------------------------------------------------- */
-
-async fn get_config() -> Json<dope_core::Config> {
-    let cfg = tokio::task::spawn_blocking(dope_core::load_config)
+async fn serve_config(headers: HeaderMap) -> Response {
+    let config = tokio::task::spawn_blocking(dope_core::load_config)
         .await
-        .unwrap_or_else(|_| default_config());
-
-    Json(cfg)
+        .unwrap_or_else(|_| Config {
+            server: dope_core::ServerConfig {
+                port: 8080,
+                pause: None,
+            },
+            scripts: None,
+            modify_response: None,
+            modify_request: None,
+        });
+    let content = html::config_page(&config);
+    page_or_fragment(&headers, content)
 }
 
-async fn update_config(
-    Json(config): Json<dope_core::Config>,
-) -> StatusCode {
-    let result = tokio::task::spawn_blocking(move || dope_core::save_config(&config))
-        .await;
+/* --- HTML Data Routes ------------------------------------------------------ */
 
-    match result {
-        Ok(Ok(())) => StatusCode::OK,
-        _ => StatusCode::INTERNAL_SERVER_ERROR,
-    }
+async fn serve_dashboard_stats() -> impl IntoResponse {
+    let entries = load_log_entries(0, 200).await;
+    let total = entries.len();
+    let hosts = entries
+        .iter()
+        .filter_map(|e| match e {
+            LogEntry::Request { host, .. } => Some(host.as_str()),
+            _ => None,
+        })
+        .collect::<HashSet<_>>()
+        .len();
+    let errors = entries
+        .iter()
+        .filter(|e| {
+            matches!(e, LogEntry::Error { .. })
+                || matches!(e, LogEntry::Response { status, .. } if *status >= 500)
+        })
+        .count();
+    Html(html::stats_cards(total, hosts, errors))
 }
 
-fn default_config() -> dope_core::Config {
-    dope_core::Config {
-        server: dope_core::ServerConfig {
-            port: 8080,
-            pause: None,
-        },
-        scripts: None,
-        modify_response: None,
-        modify_request: None,
-    }
+async fn serve_activity() -> impl IntoResponse {
+    let entries = load_log_entries(0, 20).await;
+    Html(html::activity_table(&entries))
 }
 
-/* --- Log Handlers ---------------------------------------------------------- */
+/* --- JSON API (unchanged) -------------------------------------------------- */
 
 #[derive(Deserialize)]
 struct LogQuery {
@@ -130,13 +275,48 @@ struct LogQuery {
     limit: Option<usize>,
 }
 
-async fn get_logs(Query(query): Query<LogQuery>) -> Json<Vec<dope_core::LogEntry>> {
+async fn get_config() -> Json<Config> {
+    let cfg = tokio::task::spawn_blocking(dope_core::load_config)
+        .await
+        .unwrap_or_else(|_| Config {
+            server: dope_core::ServerConfig {
+                port: 8080,
+                pause: None,
+            },
+            scripts: None,
+            modify_response: None,
+            modify_request: None,
+        });
+    Json(cfg)
+}
+
+async fn update_config(Json(config): Json<Config>) -> StatusCode {
+    let result = tokio::task::spawn_blocking(move || dope_core::save_config(&config)).await;
+    match result {
+        Ok(Ok(())) => StatusCode::OK,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+async fn get_logs(Query(query): Query<LogQuery>) -> Json<Vec<LogEntry>> {
     let since = query.since.unwrap_or(0);
     let limit = query.limit.unwrap_or(100);
-
-    let entries = tokio::task::spawn_blocking(move || dope_core::read_log_entries(since, limit))
-        .await
-        .unwrap_or_default();
-
+    let entries = load_log_entries(since, limit).await;
     Json(entries)
+}
+
+/* --- Log Table (HTML fragment) --------------------------------------------- */
+
+#[derive(Deserialize)]
+struct LogTableQuery {
+    since: Option<u64>,
+    limit: Option<usize>,
+    search: Option<String>,
+}
+
+async fn serve_log_table(Query(query): Query<LogTableQuery>) -> impl IntoResponse {
+    let since = query.since.unwrap_or(0);
+    let limit = query.limit.unwrap_or(500);
+    let entries = load_log_entries(since, limit).await;
+    Html(html::log_rows(&entries, query.search.as_deref()))
 }

@@ -94,7 +94,7 @@ pub fn log_entry_count() -> usize {
 
 /* --- Config Types ---------------------------------------------------------- */
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
     pub scripts: Option<Vec<ScriptRule>>,
@@ -102,19 +102,19 @@ pub struct Config {
     pub modify_request: Option<Vec<RequestModifier>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub port: u16,
     pub pause: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct ScriptRule {
     pub domain: String,
     pub scripts: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct ResponseModifier {
     pub domain: String,
     pub csp: Option<String>,
@@ -123,7 +123,7 @@ pub struct ResponseModifier {
     pub inject_at: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct RequestModifier {
     pub domain: String,
     pub remove_headers: Option<Vec<String>>,

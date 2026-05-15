@@ -5,20 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>dope panel</title>
 <link rel="stylesheet" href="/static/style.css">
+<script src="/static/htmx.min.js"></script>
 </head>
 <body>
 <nav>
   <h1>dope panel</h1>
-  <a href="#/" class="nav-link">Dashboard</a>
-  <a href="#/logs" class="nav-link">Logs</a>
-  <a href="#/config" class="nav-link">Config</a>
+  <a href="/dashboard" class="nav-link" hx-get="/dashboard" hx-target="#app" hx-push-url="true">Dashboard</a>
+  <a href="/logs" class="nav-link" hx-get="/logs" hx-target="#app" hx-push-url="true">Logs</a>
+  <a href="/config" class="nav-link" hx-get="/config" hx-target="#app" hx-push-url="true">Config</a>
 </nav>
 <div id="app"></div>
 <div id="toast" class="toast"></div>
-
-<script src="/static/templates.js"></script>
-<script src="/static/app.js"></script>
-<script src="/static/logs.js"></script>
-<script src="/static/config.js"></script>
+<script>
+  htmx.config.defaultSwap = "innerHTML";
+  document.body.addEventListener('htmx:after:swap', function() {
+    document.querySelectorAll('.nav-link').forEach(function(a) {
+      a.classList.toggle('active', a.pathname === location.pathname);
+    });
+  });
+  document.body.addEventListener('showToast', function(evt) {
+    var el = document.getElementById('toast');
+    el.textContent = evt.detail.value;
+    el.classList.add('show');
+    setTimeout(function() { el.classList.remove('show'); }, 2500);
+  });
+  function toggleRow(tr) {
+    var next = tr.nextElementSibling;
+    if (next && next.style.display === 'none') next.style.display = 'table-row';
+    else if (next) next.style.display = 'none';
+  }
+</script>
 </body>
 </html>
