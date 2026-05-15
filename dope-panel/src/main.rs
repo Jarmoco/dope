@@ -47,7 +47,7 @@ async fn main() {
         .route("/api/html/dashboard-stats", get(serve_dashboard_stats))
         .route("/api/html/activity", get(serve_activity))
         .route("/api/html/logs", get(serve_log_table))
-        // Config HTML routes
+        // Server config
         .route(
             "/api/html/config/server/port",
             put(config_routes::update_server_port),
@@ -56,97 +56,81 @@ async fn main() {
             "/api/html/config/server/pause",
             put(config_routes::update_server_pause),
         )
+        // Domain CRUD
         .route(
-            "/api/html/config/scripts",
-            post(config_routes::add_script_rule),
+            "/api/html/config/domain",
+            post(config_routes::add_domain),
         )
         .route(
-            "/api/html/config/scripts/:idx",
-            delete(config_routes::remove_script_rule),
+            "/api/html/config/domain/:domain",
+            delete(config_routes::remove_domain),
+        )
+        // Domain scripts
+        .route(
+            "/api/html/config/domain/:domain/scripts",
+            put(config_routes::update_domain_scripts),
+        )
+        // Domain response modifiers
+        .route(
+            "/api/html/config/domain/:domain/response",
+            put(config_routes::update_domain_response),
         )
         .route(
-            "/api/html/config/scripts/:idx",
-            put(config_routes::update_script_rule),
+            "/api/html/config/domain/:domain/response/headers",
+            post(config_routes::add_domain_response_header),
         )
         .route(
-            "/api/html/config/response",
-            post(config_routes::add_response_rule),
+            "/api/html/config/domain/:domain/response/headers/:key",
+            delete(config_routes::remove_domain_response_header),
         )
         .route(
-            "/api/html/config/response/:idx",
-            delete(config_routes::remove_response_rule),
+            "/api/html/config/domain/:domain/response/headers/key",
+            put(config_routes::update_domain_response_header_key),
         )
         .route(
-            "/api/html/config/response/:idx",
-            put(config_routes::update_response_rule),
+            "/api/html/config/domain/:domain/response/headers/val",
+            put(config_routes::update_domain_response_header_val),
         )
         .route(
-            "/api/html/config/response/:idx/headers",
-            post(config_routes::add_response_header),
+            "/api/html/config/domain/:domain/response/remove-headers",
+            post(config_routes::add_domain_response_remove_header),
         )
         .route(
-            "/api/html/config/response/:idx/headers/:key",
-            delete(config_routes::remove_response_header),
+            "/api/html/config/domain/:domain/response/remove-headers/:hi",
+            delete(config_routes::remove_domain_response_remove_header),
         )
         .route(
-            "/api/html/config/response/:idx/headers/key",
-            put(config_routes::update_response_header_key),
+            "/api/html/config/domain/:domain/response/remove-headers/:hi",
+            put(config_routes::update_domain_response_remove_header),
+        )
+        // Domain request modifiers
+        .route(
+            "/api/html/config/domain/:domain/request/headers",
+            post(config_routes::add_domain_request_header),
         )
         .route(
-            "/api/html/config/response/:idx/headers/val",
-            put(config_routes::update_response_header_val),
+            "/api/html/config/domain/:domain/request/headers/:key",
+            delete(config_routes::remove_domain_request_header),
         )
         .route(
-            "/api/html/config/response/:idx/remove-headers",
-            post(config_routes::add_response_remove_header),
+            "/api/html/config/domain/:domain/request/headers/key",
+            put(config_routes::update_domain_request_header_key),
         )
         .route(
-            "/api/html/config/response/:idx/remove-headers/:hi",
-            delete(config_routes::remove_response_remove_header),
+            "/api/html/config/domain/:domain/request/headers/val",
+            put(config_routes::update_domain_request_header_val),
         )
         .route(
-            "/api/html/config/response/:idx/remove-headers/:hi",
-            put(config_routes::update_response_remove_header),
+            "/api/html/config/domain/:domain/request/remove-headers",
+            post(config_routes::add_domain_request_remove_header),
         )
         .route(
-            "/api/html/config/request",
-            post(config_routes::add_request_rule),
+            "/api/html/config/domain/:domain/request/remove-headers/:hi",
+            delete(config_routes::remove_domain_request_remove_header),
         )
         .route(
-            "/api/html/config/request/:idx",
-            delete(config_routes::remove_request_rule),
-        )
-        .route(
-            "/api/html/config/request/:idx",
-            put(config_routes::update_request_rule),
-        )
-        .route(
-            "/api/html/config/request/:idx/headers",
-            post(config_routes::add_request_header),
-        )
-        .route(
-            "/api/html/config/request/:idx/headers/:key",
-            delete(config_routes::remove_request_header),
-        )
-        .route(
-            "/api/html/config/request/:idx/headers/key",
-            put(config_routes::update_request_header_key),
-        )
-        .route(
-            "/api/html/config/request/:idx/headers/val",
-            put(config_routes::update_request_header_val),
-        )
-        .route(
-            "/api/html/config/request/:idx/remove-headers",
-            post(config_routes::add_request_remove_header),
-        )
-        .route(
-            "/api/html/config/request/:idx/remove-headers/:hi",
-            delete(config_routes::remove_request_remove_header),
-        )
-        .route(
-            "/api/html/config/request/:idx/remove-headers/:hi",
-            put(config_routes::update_request_remove_header),
+            "/api/html/config/domain/:domain/request/remove-headers/:hi",
+            put(config_routes::update_domain_request_remove_header),
         );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 9090));

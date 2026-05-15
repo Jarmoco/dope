@@ -12,6 +12,7 @@
   /* Backgrounds */
   --color-bg-main: #1b1b1b;
   --color-bg-card: #272727;
+  --color-bg-card-section: #383838;
   --color-bg-header: #5f5f5f;
   --color-bg-code: rgba(249, 249, 249, 0.12);
   --color-bg-hover: #6e6e6e;
@@ -30,9 +31,9 @@
   --color-nav-link-hover: #ffffff;
 
   /* Borders */
-  --color-border-light: #eeeeee;
+  --color-border-light: #515151;
   --color-border: #3f3f3f;
-  --color-border-focus: #1a1a2e;
+  --color-border-focus: #828282;
 
   /* Badge: 2xx Success */
   --color-badge-2xx-bg: #40b35a;
@@ -301,7 +302,7 @@ pre {
 }
 
 .config-section h3 {
-  font-size: 15px;
+  font-size: 1.2rem;
   margin-bottom: 12px;
   color: var(--color-text-heading);
 }
@@ -451,6 +452,67 @@ pre {
 
 .detail-section pre {
   margin: 0;
+}
+
+.domain-card {
+  background: var(--color-bg-card);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.domain-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  background-color: var(--color-bg-card-section);
+}
+
+.domain-header:hover {
+  background: var(--color-bg-hover);
+}
+
+.domain-toggle {
+  font-size: 10px;
+  color: var(--color-text-subtle);
+  width: 16px;
+  text-align: center;
+}
+
+.domain-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-text-heading);
+}
+
+.domain-summary {
+  flex: 1;
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.domain-body {
+  padding: 0 16px 12px;
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-bg-card-section);
+}
+
+.domain-section {
+  padding: 12px 0;
+}
+
+.domain-section + .domain-section {
+  border-top: 1px solid var(--color-border-light);
+}
+
+.domain-section h4 {
+  font-size: 1.1rem;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
 }
 
 @media (max-width: 600px) {

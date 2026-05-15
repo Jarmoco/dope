@@ -1,8 +1,3 @@
-/* -----------------------------------------------------------------------------
- * dope-panel/src/config_routes.rs
- * HTMX route handlers for config CRUD — each returns HTML fragments.
- * -------------------------------------------------------------------------- */
-
 use std::collections::HashMap;
 
 use axum::extract::Path;
@@ -13,13 +8,14 @@ use dope_core;
 
 use crate::html;
 
-/* --- Helpers --------------------------------------------------------------- */
-
 async fn load_config() -> dope_core::Config {
     tokio::task::spawn_blocking(dope_core::load_config)
         .await
         .unwrap_or_else(|_| dope_core::Config {
-            server: dope_core::ServerConfig { port: 8080, pause: None },
+            server: dope_core::ServerConfig {
+                port: 8080,
+                pause: None,
+            },
             scripts: None,
             modify_response: None,
             modify_request: None,
@@ -40,7 +36,10 @@ fn ok_html_with_toast(body: String, msg: &str) -> Response {
     let trigger = axum::http::HeaderName::from_static("hx-trigger");
     (
         StatusCode::OK,
-        [(header::CONTENT_TYPE, "text/html; charset=utf-8"), (trigger, json.as_str())],
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (trigger, json.as_str()),
+        ],
         Html(body),
     )
         .into_response()
@@ -61,443 +60,679 @@ pub async fn update_server_port(Form(body): Form<HashMap<String, String>>) -> im
 
 pub async fn update_server_pause(body: String) -> impl IntoResponse {
     let mut config = load_config().await;
-    config.server.pause = if body.contains("cfg-pause") { Some(true) } else { None };
+    config.server.pause = if body.contains("cfg-pause") {
+        Some(true)
+    } else {
+        None
+    };
     save_config(&config).await;
     ok_html_with_toast(html::config_page(&config), "Pause toggled")
 }
 
-/* --- Script Rules ---------------------------------------------------------- */
+/* --- Domain CRUD ----------------------------------------------------------- */
 
-pub async fn add_script_rule() -> impl IntoResponse {
+pub async fn add_domain(Form(body): Form<HashMap<String, String>>) -> impl IntoResponse {
     let mut config = load_config().await;
-    config.scripts.get_or_insert_with(Vec::new).push(dope_core::ScriptRule::default());
-    save_config(&config).await;
-    ok_html_with_toast(html::scripts_section(config.scripts.as_deref().unwrap_or_default()), "Script rule added")
+    let domain = body
+        .get("domain")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    match domain {
+        Some(domain) => {
+            let exists = config
+                .scripts
+                .as_ref()
+                .map_or(false, |r| r.iter().any(|r| r.domain == domain));
+            if !exists {
+                config
+                    .scripts
+                    .get_or_insert_with(Vec::new)
+                    .push(dope_core::ScriptRule {
+                        domain: domain.clone(),
+                        ..Default::default()
+                    });
+            }
+            save_config(&config).await;
+            ok_html_with_toast(
+                html::config_page(&config),
+                &format!("Domain '{}' added", domain),
+            )
+        }
+        None => ok_html_with_toast(html::config_page(&config), "Invalid domain name"),
+    }
 }
 
-pub async fn remove_script_rule(Path(idx): Path<usize>) -> impl IntoResponse {
+pub async fn remove_domain(Path(domain): Path<String>) -> impl IntoResponse {
     let mut config = load_config().await;
-    if let Some(rules) = &mut config.scripts {
-        if idx < rules.len() {
-            rules.remove(idx);
-        }
+    if let Some(ref mut rules) = config.scripts {
+        rules.retain(|r| r.domain != domain);
+    }
+    if let Some(ref mut rules) = config.modify_response {
+        rules.retain(|r| r.domain != domain);
+    }
+    if let Some(ref mut rules) = config.modify_request {
+        rules.retain(|r| r.domain != domain);
     }
     save_config(&config).await;
-    ok_html_with_toast(html::scripts_section(config.scripts.as_deref().unwrap_or_default()), "Script rule removed")
+    ok_html_with_toast(
+        html::config_page(&config),
+        &format!("Domain '{}' removed", domain),
+    )
 }
 
-pub async fn update_script_rule(
-    Path(idx): Path<usize>,
+/* --- Domain Scripts -------------------------------------------------------- */
+
+pub async fn update_domain_scripts(
+    Path(domain): Path<String>,
     Form(body): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.scripts.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
+
+    let idx = config
+        .scripts
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    match idx {
+        Some(idx) => {
+            if let Some(rule) = config.scripts.as_mut().and_then(|rules| rules.get_mut(idx)) {
+                if let Some(scripts_val) = body.get("scripts") {
+                    rule.scripts = scripts_val
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                }
+            }
+        }
+        None => {
+            let scripts = body
+                .get("scripts")
+                .map(|v| {
+                    v.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
+            config
+                .scripts
+                .get_or_insert_with(Vec::new)
+                .push(dope_core::ScriptRule {
+                    domain: domain.clone(),
+                    scripts,
+                });
+        }
+    }
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Scripts updated",
+    )
+}
+
+/* --- Domain Response Modifiers --------------------------------------------- */
+
+pub async fn update_domain_response(
+    Path(domain): Path<String>,
+    Form(body): Form<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let mut config = load_config().await;
+
+    let idx = config
+        .modify_response
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    match idx {
+        Some(idx) => {
+            if let Some(rule) =
+                config
+                    .modify_response
+                    .as_mut()
+                    .and_then(|rules| rules.get_mut(idx))
+            {
+                for (field, value) in &body {
+                    match field.as_str() {
+                        "csp" => {
+                            rule.csp = if value.is_empty() {
+                                None
+                            } else {
+                                Some(value.clone())
+                            }
+                        }
+                        "inject_at" => {
+                            rule.inject_at = if value.is_empty() {
+                                None
+                            } else {
+                                Some(value.clone())
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        None => {
+            let mut csp = None;
+            let mut inject_at = None;
             for (field, value) in &body {
                 match field.as_str() {
-                    "domain" => rule.domain = value.clone(),
-                    "scripts" => {
-                        rule.scripts = value
-                            .split(',')
-                            .map(|s| s.trim().to_string())
-                            .filter(|s| !s.is_empty())
-                            .collect();
+                    "csp" => csp = if value.is_empty() { None } else { Some(value.clone()) },
+                    "inject_at" => {
+                        inject_at = if value.is_empty() { None } else { Some(value.clone()) }
                     }
                     _ => {}
                 }
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.scripts {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::script_card(idx, rule), "Script rule updated");
+            config
+                .modify_response
+                .get_or_insert_with(Vec::new)
+                .push(dope_core::ResponseModifier {
+                    domain: domain.clone(),
+                    csp,
+                    inject_at,
+                    ..Default::default()
+                });
         }
     }
-    ok_html_with_toast(html::scripts_section(config.scripts.as_deref().unwrap_or_default()), "Script rule updated")
-}
 
-/* --- Response Rules -------------------------------------------------------- */
-
-pub async fn add_response_rule() -> impl IntoResponse {
-    let mut config = load_config().await;
-    config.modify_response.get_or_insert_with(Vec::new).push(dope_core::ResponseModifier::default());
     save_config(&config).await;
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Response rule added")
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Response modifier updated",
+    )
 }
 
-pub async fn remove_response_rule(Path(idx): Path<usize>) -> impl IntoResponse {
-    let mut config = load_config().await;
-    if let Some(rules) = &mut config.modify_response {
-        if idx < rules.len() { rules.remove(idx); }
-    }
-    save_config(&config).await;
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Response rule removed")
-}
+/* --- Domain Response Headers ----------------------------------------------- */
 
-pub async fn update_response_rule(
-    Path(idx): Path<usize>,
-    Form(body): Form<HashMap<String, String>>,
-) -> impl IntoResponse {
+pub async fn add_domain_response_header(Path(domain): Path<String>) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_response.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            for (field, value) in &body {
-                match field.as_str() {
-                    "domain" => rule.domain = value.clone(),
-                    "csp" => rule.csp = if value.is_empty() { None } else { Some(value.clone()) },
-                    "inject_at" => rule.inject_at = if value.is_empty() { None } else { Some(value.clone()) },
-                    _ => {}
-                }
+    let idx = config
+        .modify_response
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    match idx {
+        Some(idx) => {
+            if let Some(rule) =
+                config
+                    .modify_response
+                    .as_mut()
+                    .and_then(|rules| rules.get_mut(idx))
+            {
+                let headers = rule.add_headers.get_or_insert_with(HashMap::new);
+                let n = headers.len();
+                headers.insert(format!("key{}", n), "value".to_string());
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_response {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::response_card(idx, rule), "Response rule updated");
+        }
+        None => {
+            let mut headers = HashMap::new();
+            headers.insert("key0".to_string(), "value".to_string());
+            config
+                .modify_response
+                .get_or_insert_with(Vec::new)
+                .push(dope_core::ResponseModifier {
+                    domain: domain.clone(),
+                    add_headers: Some(headers),
+                    ..Default::default()
+                });
         }
     }
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Response rule updated")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Response header added",
+    )
 }
 
-/* --- Response Headers ------------------------------------------------------ */
-
-pub async fn add_response_header(Path(idx): Path<usize>) -> impl IntoResponse {
-    let mut config = load_config().await;
-    let mutated = config.modify_response.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            let headers = rule.add_headers.get_or_insert_with(HashMap::new);
-            let n = headers.len();
-            headers.insert(format!("key{}", n), "value".to_string());
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_response {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::response_card(idx, rule), "Response header added");
-        }
-    }
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Response header added")
-}
-
-pub async fn remove_response_header(
-    Path((idx, key)): Path<(usize, String)>,
+pub async fn remove_domain_response_header(
+    Path((domain, key)): Path<(String, String)>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_response.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.add_headers {
+    let idx = config
+        .modify_response
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_response
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.add_headers {
                 headers.remove(&key);
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_response {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::response_card(idx, rule), "Response header removed");
         }
     }
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Response header removed")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Response header removed",
+    )
 }
 
-pub async fn update_response_header_key(
-    Path(idx): Path<usize>,
+pub async fn update_domain_response_header_key(
+    Path(domain): Path<String>,
     Form(body): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_response.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.add_headers {
+    let idx = config
+        .modify_response
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_response
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.add_headers {
                 for (old_key, new_key) in &body {
                     if let Some(val) = headers.remove(old_key) {
                         headers.insert(new_key.clone(), val);
                     }
                 }
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_response {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::response_card(idx, rule), "Response header key updated");
         }
     }
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Response header key updated")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Response header key updated",
+    )
 }
 
-pub async fn update_response_header_val(
-    Path(idx): Path<usize>,
+pub async fn update_domain_response_header_val(
+    Path(domain): Path<String>,
     Form(body): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_response.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.add_headers {
+    let idx = config
+        .modify_response
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_response
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.add_headers {
                 for (key, new_val) in &body {
                     if headers.contains_key(key) {
                         headers.insert(key.clone(), new_val.clone());
                     }
                 }
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_response {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::response_card(idx, rule), "Response header value updated");
         }
     }
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Response header value updated")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Response header value updated",
+    )
 }
 
-/* --- Response Remove-Headers ----------------------------------------------- */
+/* --- Domain Response Remove-Headers ---------------------------------------- */
 
-pub async fn add_response_remove_header(Path(idx): Path<usize>) -> impl IntoResponse {
+pub async fn add_domain_response_remove_header(Path(domain): Path<String>) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_response.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            rule.remove_headers.get_or_insert_with(Vec::new).push(String::new());
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_response {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::response_card(idx, rule), "Remove-header added");
-        }
-    }
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Remove-header added")
-}
+    let idx = config
+        .modify_response
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
-pub async fn remove_response_remove_header(
-    Path((idx, hi)): Path<(usize, usize)>,
-) -> impl IntoResponse {
-    let mut config = load_config().await;
-    let mutated = config.modify_response.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.remove_headers {
-                if hi < headers.len() { headers.remove(hi); }
+    match idx {
+        Some(idx) => {
+            if let Some(rule) =
+                config
+                    .modify_response
+                    .as_mut()
+                    .and_then(|rules| rules.get_mut(idx))
+            {
+                rule.remove_headers
+                    .get_or_insert_with(Vec::new)
+                    .push(String::new());
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_response {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::response_card(idx, rule), "Remove-header removed");
+        }
+        None => {
+            config
+                .modify_response
+                .get_or_insert_with(Vec::new)
+                .push(dope_core::ResponseModifier {
+                    domain: domain.clone(),
+                    remove_headers: Some(vec![String::new()]),
+                    ..Default::default()
+                });
         }
     }
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Remove-header removed")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Remove-header added",
+    )
 }
 
-pub async fn update_response_remove_header(
-    Path((idx, hi)): Path<(usize, usize)>,
-    Form(body): Form<HashMap<String, String>>,
+pub async fn remove_domain_response_remove_header(
+    Path((domain, hi)): Path<(String, usize)>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_response.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.remove_headers {
+    let idx = config
+        .modify_response
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_response
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.remove_headers {
                 if hi < headers.len() {
-                    for (_, val) in &body { headers[hi] = val.clone(); }
+                    headers.remove(hi);
                 }
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_response {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::response_card(idx, rule), "Remove-header updated");
         }
     }
-    ok_html_with_toast(html::response_section(config.modify_response.as_deref().unwrap_or_default()), "Remove-header updated")
-}
 
-/* --- Request Rules --------------------------------------------------------- */
-
-pub async fn add_request_rule() -> impl IntoResponse {
-    let mut config = load_config().await;
-    config.modify_request.get_or_insert_with(Vec::new).push(dope_core::RequestModifier::default());
     save_config(&config).await;
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Request rule added")
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Remove-header removed",
+    )
 }
 
-pub async fn remove_request_rule(Path(idx): Path<usize>) -> impl IntoResponse {
-    let mut config = load_config().await;
-    if let Some(rules) = &mut config.modify_request {
-        if idx < rules.len() { rules.remove(idx); }
-    }
-    save_config(&config).await;
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Request rule removed")
-}
-
-pub async fn update_request_rule(
-    Path(idx): Path<usize>,
+pub async fn update_domain_response_remove_header(
+    Path((domain, hi)): Path<(String, usize)>,
     Form(body): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_request.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            for (field, value) in &body {
-                if field == "domain" { rule.domain = value.clone(); }
+    let idx = config
+        .modify_response
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_response
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.remove_headers {
+                if hi < headers.len() {
+                    for (_, val) in &body {
+                        headers[hi] = val.clone();
+                    }
+                }
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_request {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::request_card(idx, rule), "Request rule updated");
         }
     }
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Request rule updated")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Remove-header updated",
+    )
 }
 
-/* --- Request Headers ------------------------------------------------------- */
+/* --- Domain Request Headers ------------------------------------------------ */
 
-pub async fn add_request_header(Path(idx): Path<usize>) -> impl IntoResponse {
+pub async fn add_domain_request_header(Path(domain): Path<String>) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_request.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            let headers = rule.add_headers.get_or_insert_with(HashMap::new);
-            let n = headers.len();
-            headers.insert(format!("key{}", n), "value".to_string());
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_request {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::request_card(idx, rule), "Request header added");
+    let idx = config
+        .modify_request
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    match idx {
+        Some(idx) => {
+            if let Some(rule) =
+                config
+                    .modify_request
+                    .as_mut()
+                    .and_then(|rules| rules.get_mut(idx))
+            {
+                let headers = rule.add_headers.get_or_insert_with(HashMap::new);
+                let n = headers.len();
+                headers.insert(format!("key{}", n), "value".to_string());
+            }
+        }
+        None => {
+            let mut headers = HashMap::new();
+            headers.insert("key0".to_string(), "value".to_string());
+            config
+                .modify_request
+                .get_or_insert_with(Vec::new)
+                .push(dope_core::RequestModifier {
+                    domain: domain.clone(),
+                    add_headers: Some(headers),
+                    ..Default::default()
+                });
         }
     }
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Request header added")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Request header added",
+    )
 }
 
-pub async fn remove_request_header(
-    Path((idx, key)): Path<(usize, String)>,
+pub async fn remove_domain_request_header(
+    Path((domain, key)): Path<(String, String)>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_request.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.add_headers {
+    let idx = config
+        .modify_request
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_request
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.add_headers {
                 headers.remove(&key);
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_request {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::request_card(idx, rule), "Request header removed");
         }
     }
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Request header removed")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Request header removed",
+    )
 }
 
-pub async fn update_request_header_key(
-    Path(idx): Path<usize>,
+pub async fn update_domain_request_header_key(
+    Path(domain): Path<String>,
     Form(body): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_request.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.add_headers {
+    let idx = config
+        .modify_request
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_request
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.add_headers {
                 for (old_key, new_key) in &body {
                     if let Some(val) = headers.remove(old_key) {
                         headers.insert(new_key.clone(), val);
                     }
                 }
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_request {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::request_card(idx, rule), "Request header key updated");
         }
     }
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Request header key updated")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Request header key updated",
+    )
 }
 
-pub async fn update_request_header_val(
-    Path(idx): Path<usize>,
+pub async fn update_domain_request_header_val(
+    Path(domain): Path<String>,
     Form(body): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_request.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.add_headers {
+    let idx = config
+        .modify_request
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_request
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.add_headers {
                 for (key, new_val) in &body {
                     if headers.contains_key(key) {
                         headers.insert(key.clone(), new_val.clone());
                     }
                 }
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_request {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::request_card(idx, rule), "Request header value updated");
         }
     }
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Request header value updated")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Request header value updated",
+    )
 }
 
-/* --- Request Remove-Headers ------------------------------------------------ */
+/* --- Domain Request Remove-Headers ----------------------------------------- */
 
-pub async fn add_request_remove_header(Path(idx): Path<usize>) -> impl IntoResponse {
+pub async fn add_domain_request_remove_header(Path(domain): Path<String>) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_request.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            rule.remove_headers.get_or_insert_with(Vec::new).push(String::new());
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_request {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::request_card(idx, rule), "Remove-header added");
+    let idx = config
+        .modify_request
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    match idx {
+        Some(idx) => {
+            if let Some(rule) =
+                config
+                    .modify_request
+                    .as_mut()
+                    .and_then(|rules| rules.get_mut(idx))
+            {
+                rule.remove_headers
+                    .get_or_insert_with(Vec::new)
+                    .push(String::new());
+            }
+        }
+        None => {
+            config
+                .modify_request
+                .get_or_insert_with(Vec::new)
+                .push(dope_core::RequestModifier {
+                    domain: domain.clone(),
+                    remove_headers: Some(vec![String::new()]),
+                    ..Default::default()
+                });
         }
     }
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Remove-header added")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Remove-header added",
+    )
 }
 
-pub async fn remove_request_remove_header(
-    Path((idx, hi)): Path<(usize, usize)>,
+pub async fn remove_domain_request_remove_header(
+    Path((domain, hi)): Path<(String, usize)>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_request.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.remove_headers {
-                if hi < headers.len() { headers.remove(hi); }
+    let idx = config
+        .modify_request
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_request
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.remove_headers {
+                if hi < headers.len() {
+                    headers.remove(hi);
+                }
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_request {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::request_card(idx, rule), "Remove-header removed");
         }
     }
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Remove-header removed")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Remove-header removed",
+    )
 }
 
-pub async fn update_request_remove_header(
-    Path((idx, hi)): Path<(usize, usize)>,
+pub async fn update_domain_request_remove_header(
+    Path((domain, hi)): Path<(String, usize)>,
     Form(body): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let mut config = load_config().await;
-    let mutated = config.modify_request.as_mut().and_then(|rules| {
-        rules.get_mut(idx).map(|rule| {
-            if let Some(headers) = &mut rule.remove_headers {
+    let idx = config
+        .modify_request
+        .as_ref()
+        .and_then(|rules| rules.iter().position(|r| r.domain == domain));
+
+    if let Some(idx) = idx {
+        if let Some(rule) =
+            config
+                .modify_request
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
+        {
+            if let Some(ref mut headers) = rule.remove_headers {
                 if hi < headers.len() {
-                    for (_, val) in &body { headers[hi] = val.clone(); }
+                    for (_, val) in &body {
+                        headers[hi] = val.clone();
+                    }
                 }
             }
-        })
-    }).is_some();
-    if mutated { save_config(&config).await; }
-    if let Some(rules) = &config.modify_request {
-        if let Some(rule) = rules.get(idx) {
-            return ok_html_with_toast(html::request_card(idx, rule), "Remove-header updated");
         }
     }
-    ok_html_with_toast(html::request_section(config.modify_request.as_deref().unwrap_or_default()), "Remove-header updated")
+
+    save_config(&config).await;
+    ok_html_with_toast(
+        html::domain_card(&config, &domain, true),
+        "Remove-header updated",
+    )
 }

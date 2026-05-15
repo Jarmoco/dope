@@ -17,9 +17,13 @@ fn render(t: &str, params: &[(&str, &str)]) -> String {
     s
 }
 
+/* --- Page Shell ------------------------------------------------------------ */
+
 pub fn page_shell(content: &str) -> String {
     render(template("page-shell.html"), &[("content", content)])
 }
+
+/* --- Dashboard ------------------------------------------------------------- */
 
 pub fn dashboard_page(total: usize, hosts: usize, errors: usize) -> String {
     let stats = stats_cards(total, hosts, errors);
@@ -53,6 +57,8 @@ fn activity_rows(entries: &[LogEntry]) -> String {
         .collect::<Vec<_>>()
         .join("")
 }
+
+/* --- Logs ------------------------------------------------------------------ */
 
 pub fn logs_page() -> String {
     template("logs-page.html").to_string()
@@ -92,6 +98,8 @@ pub fn log_rows(entries: &[LogEntry], search: Option<&str>) -> String {
 
     render(template("log-table.html"), &[("rows", &rows)])
 }
+
+/* --- Log Helpers ----------------------------------------------------------- */
 
 struct LogGroup {
     request: Option<LogEntry>,
@@ -311,204 +319,6 @@ fn html_esc(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-pub fn config_page(config: &Config) -> String {
-    render(
-        template("config-page.html"),
-        &[
-            ("port", &config.server.port.to_string()),
-            (
-                "paused",
-                if config.server.pause.unwrap_or(false) {
-                    " checked"
-                } else {
-                    ""
-                },
-            ),
-            (
-                "scripts",
-                &scripts_section(config.scripts.as_deref().unwrap_or_default()),
-            ),
-            (
-                "response",
-                &response_section(config.modify_response.as_deref().unwrap_or_default()),
-            ),
-            (
-                "request",
-                &request_section(config.modify_request.as_deref().unwrap_or_default()),
-            ),
-        ],
-    )
-}
-
-pub fn scripts_section(rules: &[ScriptRule]) -> String {
-    if rules.is_empty() {
-        return render(template("empty-state.html"), &[("message", "No script rules configured.")]);
-    }
-    rules
-        .iter()
-        .enumerate()
-        .map(|(i, r)| script_card(i, r))
-        .collect::<Vec<_>>()
-        .join("")
-}
-
-pub fn script_card(idx: usize, r: &ScriptRule) -> String {
-    render(
-        template("script-card.html"),
-        &[
-            ("idx", &idx.to_string()),
-            ("domain", &html_esc(&r.domain)),
-            ("scripts", &html_esc(&r.scripts.join(", "))),
-        ],
-    )
-}
-
-pub fn response_section(rules: &[ResponseModifier]) -> String {
-    if rules.is_empty() {
-        return render(template("empty-state.html"), &[("message", "No response modifiers configured.")]);
-    }
-    rules
-        .iter()
-        .enumerate()
-        .map(|(i, r)| response_card(i, r))
-        .collect::<Vec<_>>()
-        .join("")
-}
-
-pub fn response_card(idx: usize, r: &ResponseModifier) -> String {
-    let csp_opts = csp_options(r.csp.as_deref());
-    let inject_opts = inject_options(r.inject_at.as_deref());
-
-    let remove_headers_html = match &r.remove_headers {
-        Some(hs) => hs
-            .iter()
-            .enumerate()
-            .map(|(hi, h)| remove_header_row("response", idx, hi, h))
-            .collect::<Vec<_>>()
-            .join(""),
-        None => String::new(),
-    };
-
-    let headers_html = match &r.add_headers {
-        Some(hs) => hs
-            .iter()
-            .enumerate()
-            .map(|(hi, (k, v))| header_pair_row("Response", idx, hi, k, v))
-            .collect::<Vec<_>>()
-            .join(""),
-        None => String::new(),
-    };
-
-    render(
-        template("response-card.html"),
-        &[
-            ("idx", &idx.to_string()),
-            ("domain", &html_esc(&r.domain)),
-            ("csp", &csp_opts),
-            ("remove_headers", &remove_headers_html),
-            ("inject", &inject_opts),
-            ("headers", &headers_html),
-        ],
-    )
-}
-
-pub fn request_section(rules: &[RequestModifier]) -> String {
-    if rules.is_empty() {
-        return render(template("empty-state.html"), &[("message", "No request modifiers configured.")]);
-    }
-    rules
-        .iter()
-        .enumerate()
-        .map(|(i, r)| request_card(i, r))
-        .collect::<Vec<_>>()
-        .join("")
-}
-
-pub fn request_card(idx: usize, r: &RequestModifier) -> String {
-    let remove_headers_html = match &r.remove_headers {
-        Some(hs) => hs
-            .iter()
-            .enumerate()
-            .map(|(hi, h)| remove_header_row("request", idx, hi, h))
-            .collect::<Vec<_>>()
-            .join(""),
-        None => String::new(),
-    };
-
-    let headers_html = match &r.add_headers {
-        Some(hs) => hs
-            .iter()
-            .enumerate()
-            .map(|(hi, (k, v))| header_pair_row("Request", idx, hi, k, v))
-            .collect::<Vec<_>>()
-            .join(""),
-        None => String::new(),
-    };
-
-    render(
-        template("request-card.html"),
-        &[
-            ("idx", &idx.to_string()),
-            ("domain", &html_esc(&r.domain)),
-            ("remove_headers", &remove_headers_html),
-            ("headers", &headers_html),
-        ],
-    )
-}
-
-fn csp_options(current: Option<&str>) -> String {
-    render(
-        template("csp-options.html"),
-        &[
-            ("csp_none", if current.is_none() || current == Some("") { " selected" } else { "" }),
-            ("csp_remove_nonce", if current == Some("remove_nonce") { " selected" } else { "" }),
-            ("csp_remove_all", if current == Some("remove_all") { " selected" } else { "" }),
-            ("csp_relax_connect_src", if current == Some("relax_connect_src") { " selected" } else { "" }),
-            ("csp_keep", if current == Some("keep") { " selected" } else { "" }),
-        ],
-    )
-}
-
-fn inject_options(current: Option<&str>) -> String {
-    render(
-        template("inject-options.html"),
-        &[
-            ("inject_default", if current.is_none() || current == Some("") { " selected" } else { "" }),
-            ("inject_head_end", if current == Some("head_end") { " selected" } else { "" }),
-            ("inject_body_end", if current == Some("body_end") { " selected" } else { "" }),
-            ("inject_html_end", if current == Some("html_end") { " selected" } else { "" }),
-            ("inject_append", if current == Some("append") { " selected" } else { "" }),
-        ],
-    )
-}
-
-fn header_pair_row(ty: &str, idx: usize, _hi: usize, key: &str, val: &str) -> String {
-    let ty_lower = ty.to_lowercase();
-    render(
-        template("header-pair.html"),
-        &[
-            ("ty", ty),
-            ("ty_lower", &ty_lower),
-            ("idx", &idx.to_string()),
-            ("key", &html_esc(key)),
-            ("key_url", &urlencode(key)),
-            ("val", &html_esc(val)),
-        ],
-    )
-}
-
-fn remove_header_row(ty: &str, idx: usize, hi: usize, val: &str) -> String {
-    render(
-        template("remove-header.html"),
-        &[
-            ("ty", ty),
-            ("idx", &idx.to_string()),
-            ("hi", &hi.to_string()),
-            ("val", &html_esc(val)),
-        ],
-    )
-}
-
 fn urlencode(s: &str) -> String {
     let mut result = String::new();
     for byte in s.bytes() {
@@ -522,4 +332,330 @@ fn urlencode(s: &str) -> String {
         }
     }
     result
+}
+
+/* --- Config Page ----------------------------------------------------------- */
+
+pub fn config_page(config: &Config) -> String {
+    render(
+        template("config-page.html"),
+        &[
+            ("port", &config.server.port.to_string()),
+            (
+                "paused",
+                if config.server.pause.unwrap_or(false) {
+                    " checked"
+                } else {
+                    ""
+                },
+            ),
+            ("domain_cards", &domain_list(config)),
+        ],
+    )
+}
+
+fn all_domains(config: &Config) -> Vec<String> {
+    let mut domains: Vec<String> = Vec::new();
+    if let Some(ref rules) = config.scripts {
+        for rule in rules {
+            if !domains.contains(&rule.domain) {
+                domains.push(rule.domain.clone());
+            }
+        }
+    }
+    if let Some(ref rules) = config.modify_response {
+        for rule in rules {
+            if !domains.contains(&rule.domain) {
+                domains.push(rule.domain.clone());
+            }
+        }
+    }
+    if let Some(ref rules) = config.modify_request {
+        for rule in rules {
+            if !domains.contains(&rule.domain) {
+                domains.push(rule.domain.clone());
+            }
+        }
+    }
+    domains.sort();
+    domains
+}
+
+pub fn domain_list(config: &Config) -> String {
+    let domains = all_domains(config);
+    if domains.is_empty() {
+        return render(template("empty-state.html"), &[("message", "No domain rules configured.")]);
+    }
+    domains
+        .iter()
+        .map(|d| domain_card(config, d, false))
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+pub fn domain_card(config: &Config, domain: &str, expanded: bool) -> String {
+    let script = config
+        .scripts
+        .as_ref()
+        .and_then(|rules| rules.iter().find(|r| r.domain == domain));
+    let response = config
+        .modify_response
+        .as_ref()
+        .and_then(|rules| rules.iter().find(|r| r.domain == domain));
+    let request = config
+        .modify_request
+        .as_ref()
+        .and_then(|rules| rules.iter().find(|r| r.domain == domain));
+
+    let body_display = if expanded { "block" } else { "none" };
+    let toggle_icon = if expanded { "\u{25BC}" } else { "\u{25B6}" };
+
+    let summary = build_domain_summary(script, response, request);
+
+    let scripts_val = script.map(|s| s.scripts.join(", ")).unwrap_or_default();
+    let csp_opts = csp_options(response.and_then(|r| r.csp.as_deref()));
+    let inject_opts = inject_options(response.and_then(|r| r.inject_at.as_deref()));
+
+    let (response_remove_headers, response_headers) = match response {
+        Some(r) => (
+            build_remove_headers_list("response", domain, r.remove_headers.as_deref()),
+            build_headers_list("response", domain, r.add_headers.as_ref()),
+        ),
+        None => (String::new(), String::new()),
+    };
+
+    let (request_remove_headers, request_headers) = match request {
+        Some(r) => (
+            build_remove_headers_list("request", domain, r.remove_headers.as_deref()),
+            build_headers_list("request", domain, r.add_headers.as_ref()),
+        ),
+        None => (String::new(), String::new()),
+    };
+
+    render(
+        template("domain-card.html"),
+        &[
+            ("domain_url", &urlencode(domain)),
+            ("domain", &html_esc(domain)),
+            ("toggle_icon", toggle_icon),
+            ("body_display", body_display),
+            ("summary", &summary),
+            ("scripts_val", &html_esc(&scripts_val)),
+            ("csp_options", &csp_opts),
+            ("inject_options", &inject_opts),
+            ("response_remove_headers", &response_remove_headers),
+            ("response_headers", &response_headers),
+            ("request_remove_headers", &request_remove_headers),
+            ("request_headers", &request_headers),
+        ],
+    )
+}
+
+fn build_domain_summary(
+    script: Option<&ScriptRule>,
+    response: Option<&ResponseModifier>,
+    request: Option<&RequestModifier>,
+) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(s) = script {
+        if !s.scripts.is_empty() {
+            parts.push(format!("Scripts: {}", s.scripts.len()));
+        }
+    }
+    if let Some(r) = response {
+        let mut sub: Vec<String> = Vec::new();
+        if r.csp.is_some() {
+            sub.push("CSP".to_string());
+        }
+        if let Some(ref hs) = r.remove_headers {
+            if !hs.is_empty() {
+                sub.push(format!("-{} hdrs", hs.len()));
+            }
+        }
+        if let Some(ref hs) = r.add_headers {
+            if !hs.is_empty() {
+                sub.push(format!("+{} hdrs", hs.len()));
+            }
+        }
+        if r.inject_at.is_some() {
+            sub.push("inject".to_string());
+        }
+        if !sub.is_empty() {
+            parts.push(format!("Response: {}", sub.join(", ")));
+        }
+    }
+    if let Some(r) = request {
+        let mut sub: Vec<String> = Vec::new();
+        if let Some(ref hs) = r.remove_headers {
+            if !hs.is_empty() {
+                sub.push(format!("-{} hdrs", hs.len()));
+            }
+        }
+        if let Some(ref hs) = r.add_headers {
+            if !hs.is_empty() {
+                sub.push(format!("+{} hdrs", hs.len()));
+            }
+        }
+        if !sub.is_empty() {
+            parts.push(format!("Request: {}", sub.join(", ")));
+        }
+    }
+    if parts.is_empty() {
+        "No rules configured".to_string()
+    } else {
+        parts.join(" | ")
+    }
+}
+
+/* --- Config Shared Helpers ------------------------------------------------- */
+
+fn csp_options(current: Option<&str>) -> String {
+    render(
+        template("csp-options.html"),
+        &[
+            (
+                "csp_none",
+                if current.is_none() || current == Some("") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+            (
+                "csp_remove_nonce",
+                if current == Some("remove_nonce") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+            (
+                "csp_remove_all",
+                if current == Some("remove_all") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+            (
+                "csp_relax_connect_src",
+                if current == Some("relax_connect_src") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+            (
+                "csp_keep",
+                if current == Some("keep") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+        ],
+    )
+}
+
+fn inject_options(current: Option<&str>) -> String {
+    render(
+        template("inject-options.html"),
+        &[
+            (
+                "inject_default",
+                if current.is_none() || current == Some("") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+            (
+                "inject_head_end",
+                if current == Some("head_end") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+            (
+                "inject_body_end",
+                if current == Some("body_end") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+            (
+                "inject_html_end",
+                if current == Some("html_end") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+            (
+                "inject_append",
+                if current == Some("append") {
+                    " selected"
+                } else {
+                    ""
+                },
+            ),
+        ],
+    )
+}
+
+fn build_remove_headers_list(ty: &str, domain: &str, headers: Option<&[String]>) -> String {
+    match headers {
+        Some(hs) => hs
+            .iter()
+            .enumerate()
+            .map(|(hi, h)| remove_header_row(ty, domain, hi, h))
+            .collect::<Vec<_>>()
+            .join(""),
+        None => String::new(),
+    }
+}
+
+fn build_headers_list(
+    ty: &str,
+    domain: &str,
+    headers: Option<&HashMap<String, String>>,
+) -> String {
+    match headers {
+        Some(hs) => hs
+            .iter()
+            .enumerate()
+            .map(|(hi, (k, v))| header_pair_row(ty, domain, hi, k, v))
+            .collect::<Vec<_>>()
+            .join(""),
+        None => String::new(),
+    }
+}
+
+fn header_pair_row(ty: &str, domain: &str, _hi: usize, key: &str, val: &str) -> String {
+    let ty_lower = ty.to_lowercase();
+    render(
+        template("header-pair.html"),
+        &[
+            ("domain_url", &urlencode(domain)),
+            ("ty_lower", &ty_lower),
+            ("key", &html_esc(key)),
+            ("key_url", &urlencode(key)),
+            ("val", &html_esc(val)),
+        ],
+    )
+}
+
+fn remove_header_row(ty: &str, domain: &str, hi: usize, val: &str) -> String {
+    let ty_lower = ty.to_lowercase();
+    render(
+        template("remove-header.html"),
+        &[
+            ("domain_url", &urlencode(domain)),
+            ("ty_lower", &ty_lower),
+            ("hi", &hi.to_string()),
+            ("val", &html_esc(val)),
+        ],
+    )
 }

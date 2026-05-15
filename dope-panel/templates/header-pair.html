@@ -1,8 +1,8 @@
 <div class="header-pair config-row">
   <input type="text" value="{key}" name="{key}" placeholder="Name"
-         hx-put="/api/html/config/{ty_lower}/{idx}/headers/key" hx-trigger="change" hx-target="#{ty_lower}-card-{idx}" hx-swap="outerHTML">
+         hx-put="/api/html/config/domain/{domain_url}/{ty_lower}/headers/key" hx-trigger="change" hx-target="#domain-{domain_url}" hx-swap="outerHTML">
   <span>=</span>
   <input type="text" value="{val}" name="{key}" placeholder="Value"
-         hx-put="/api/html/config/{ty_lower}/{idx}/headers/val" hx-trigger="change" hx-target="#{ty_lower}-card-{idx}" hx-swap="outerHTML">
-  <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/{ty_lower}/{idx}/headers/{key_url}" hx-target="#{ty_lower}-card-{idx}" hx-swap="outerHTML">x</button>
+         hx-put="/api/html/config/domain/{domain_url}/{ty_lower}/headers/val" hx-trigger="change" hx-target="#domain-{domain_url}" hx-swap="outerHTML">
+  <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/domain/{domain_url}/{ty_lower}/headers/{key_url}" hx-target="#domain-{domain_url}" hx-swap="outerHTML">x</button>
 </div>
