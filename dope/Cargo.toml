@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 dope-core = { path = "../dope-core" }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 async-compression = {version = "0.4.41", features = ["tokio", "gzip", "brotli", "zlib", "zstd"]}
 http-body-util = "0.1.3"
 hudsucker = "0.24.0"

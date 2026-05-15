@@ -5,6 +5,9 @@ members = ["dope-core", "dope", "dope-panel"]
 [workspace.package]
 version = "0.1.2"
 
+[patch.crates-io]
+tokio-rustls = { path = "patches/tokio-rustls" }
+
 [profile.release]
 opt-level = "z"
 lto = true

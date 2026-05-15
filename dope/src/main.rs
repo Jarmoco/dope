@@ -7,7 +7,7 @@
 use hudsucker::{
     certificate_authority::RcgenAuthority,
     rcgen::{Issuer, KeyPair},
-    rustls::crypto::aws_lc_rs,
+    rustls::crypto,
     Proxy,
 };
 use std::io::IsTerminal;
@@ -102,6 +102,18 @@ fn print_config_summary(cfg: &dope_core::Config) {
 
 /* --- Shutdown -------------------------------------------------------------- */
 
+#[cfg(unix)]
+async fn shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut term = signal(SignalKind::terminate())
+        .expect("install SIGTERM handler");
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {},
+        _ = term.recv() => {},
+    }
+}
+
+#[cfg(not(unix))]
 async fn shutdown_signal() {
     tokio::signal::ctrl_c()
         .await
@@ -203,7 +215,8 @@ async fn main() {
         Ok(content) => content,
         Err(e) => {
             error!("Failed to read {}: {}", ca_key_path.display(), e);
-            error!("Generate with: openssl req -x509 -newkey rsa:4096 -keyout {} -out {} -days 365 -nodes",
+            error!("Generate a CA certificate using OpenSSL (install it first on Windows):");
+            error!("  openssl req -x509 -newkey rsa:4096 -keyout {} -out {} -days 365 -nodes",
                    ca_key_path.display(), ca_cert_path.display());
             error!("Then add {} to your browser's trusted certificates.", ca_cert_path.display());
             return;
@@ -214,7 +227,8 @@ async fn main() {
         Ok(content) => content,
         Err(e) => {
             error!("Failed to read {}: {}", ca_cert_path.display(), e);
-            error!("Generate with: openssl req -x509 -newkey rsa:4096 -keyout {} -out {} -days 365 -nodes",
+            error!("Generate a CA certificate using OpenSSL (install it first on Windows):");
+            error!("  openssl req -x509 -newkey rsa:4096 -keyout {} -out {} -days 365 -nodes",
                    ca_key_path.display(), ca_cert_path.display());
             error!("Then add {} to your browser's trusted certificates.", ca_cert_path.display());
             return;
@@ -237,7 +251,7 @@ async fn main() {
         }
     };
 
-    let ca = RcgenAuthority::new(issuer, 1_000, aws_lc_rs::default_provider());
+    let ca = RcgenAuthority::new(issuer, 1_000, crypto::ring::default_provider());
 
     /* --- Start proxy ------------------------------------------------------- */
 
@@ -251,7 +265,7 @@ async fn main() {
     let proxy = Proxy::builder()
         .with_addr(SocketAddr::from(([127, 0, 0, 1], port)))
         .with_ca(ca)
-        .with_rustls_connector(aws_lc_rs::default_provider())
+        .with_rustls_connector(crypto::ring::default_provider())
         .with_http_handler(traffic_handler.clone())
         .with_websocket_handler(traffic_handler.clone())
         .with_graceful_shutdown(shutdown_signal())
