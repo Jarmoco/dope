@@ -1,0 +1,11 @@
+<div class="header-pair config-row">
+  <select name="name"
+          hx-put="/api/html/config/domain/{domain_url}/scripts/{idx}"
+          hx-trigger="change"
+          hx-target="closest .domain-card" hx-swap="outerHTML">
+{options}
+  </select>
+  <button class="btn btn-danger btn-sm"
+          hx-delete="/api/html/config/domain/{domain_url}/scripts/{idx}"
+          hx-target="closest .domain-card" hx-swap="outerHTML">x</button>
+</div>

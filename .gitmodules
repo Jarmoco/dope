@@ -1,0 +1,3 @@
+[submodule "rcc-scripts"]
+	path = rcc-scripts
+	url = https://github.com/Jarmoco/rcc-scripts

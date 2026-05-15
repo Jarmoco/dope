@@ -1,0 +1,61 @@
+<div class="domain-card" id="domain-{domain_url}">
+  <div class="domain-header" onclick="toggleCard(this)">
+    <span class="domain-toggle">{toggle_icon}</span>
+    <span class="domain-name">{domain}</span>
+    <span class="domain-summary">{summary}</span>
+    <button class="btn btn-danger btn-sm"
+            hx-delete="/api/html/config/domain/{domain_url}"
+            hx-target="#app"
+            hx-swap="innerHTML"
+            onclick="event.stopPropagation()">Remove</button>
+  </div>
+  <div class="domain-body" style="display:{body_display}">
+    <div class="domain-section">
+      <h4>Script Rules</h4>
+      <div id="domain-{domain_url}-scripts">{script_entries}</div>
+      <button class="btn btn-sm btn-secondary"
+              hx-post="/api/html/config/domain/{domain_url}/scripts"
+              hx-target="closest .domain-card" hx-swap="outerHTML">+ Add Script</button>
+    </div>
+    <div class="domain-section">
+      <h4>Response Modifiers</h4>
+      <div class="config-row">
+        <label>CSP</label>
+        <select name="csp" hx-put="/api/html/config/domain/{domain_url}/response" hx-trigger="change"
+                hx-target="closest .domain-card" hx-swap="outerHTML">
+{csp_options}
+        </select>
+      </div>
+      <div class="config-row"><label>Remove Headers</label></div>
+      <div id="domain-{domain_url}-response-remove-headers">{response_remove_headers}</div>
+      <button class="btn btn-sm btn-secondary"
+              hx-post="/api/html/config/domain/{domain_url}/response/remove-headers"
+              hx-target="closest .domain-card" hx-swap="outerHTML">+ Add Header to Remove</button>
+      <div class="config-row config-row-gap">
+        <label>Inject At</label>
+        <select name="inject_at" hx-put="/api/html/config/domain/{domain_url}/response" hx-trigger="change"
+                hx-target="closest .domain-card" hx-swap="outerHTML">
+{inject_options}
+        </select>
+      </div>
+      <div class="config-row config-row-gap"><label>Add Headers</label></div>
+      <div id="domain-{domain_url}-response-headers">{response_headers}</div>
+      <button class="btn btn-sm btn-secondary"
+              hx-post="/api/html/config/domain/{domain_url}/response/headers"
+              hx-target="closest .domain-card" hx-swap="outerHTML">+ Add Header</button>
+    </div>
+    <div class="domain-section">
+      <h4>Request Modifiers</h4>
+      <div class="config-row"><label>Remove Headers</label></div>
+      <div id="domain-{domain_url}-request-remove-headers">{request_remove_headers}</div>
+      <button class="btn btn-sm btn-secondary"
+              hx-post="/api/html/config/domain/{domain_url}/request/remove-headers"
+              hx-target="closest .domain-card" hx-swap="outerHTML">+ Add Header to Remove</button>
+      <div class="config-row config-row-gap"><label>Add Headers</label></div>
+      <div id="domain-{domain_url}-request-headers">{request_headers}</div>
+      <button class="btn btn-sm btn-secondary"
+              hx-post="/api/html/config/domain/{domain_url}/request/headers"
+              hx-target="closest .domain-card" hx-swap="outerHTML">+ Add Header</button>
+    </div>
+  </div>
+</div>
