@@ -1,94 +1,48 @@
-/* -----------------------------------------------------------------------------
- * dope-panel/src/html.rs
- * Generates all HTML fragments for the admin panel via format!().
- * -------------------------------------------------------------------------- */
-
 use std::collections::HashMap;
 
 use dope_core::{Config, LogEntry, RequestModifier, ResponseModifier, ScriptRule};
+use include_dir::{include_dir, Dir};
 
-/* --- Page Shell ------------------------------------------------------------ */
+static TEMPLATES: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
-pub fn page_shell(content: &str) -> String {
-    format!(
-        r##"<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>dope panel</title>
-<link rel="stylesheet" href="/static/style.css">
-<script src="/static/htmx.min.js"></script>
-</head>
-<body>
-<nav>
-  <h1>dope panel</h1>
-  <a href="/dashboard" class="nav-link" hx-get="/dashboard" hx-target="#app" hx-push-url="true">Dashboard</a>
-  <a href="/logs" class="nav-link" hx-get="/logs" hx-target="#app" hx-push-url="true">Logs</a>
-  <a href="/config" class="nav-link" hx-get="/config" hx-target="#app" hx-push-url="true">Config</a>
-</nav>
-<div id="app">{}</div>
-<div id="toast" class="toast"></div>
-<script>
-  htmx.config.defaultSwap = "innerHTML";
-  document.body.addEventListener('htmx:after:swap', function() {{
-    document.querySelectorAll('.nav-link').forEach(function(a) {{
-      a.classList.toggle('active', a.pathname === location.pathname);
-    }});
-  }});
-  document.body.addEventListener('showToast', function(evt) {{
-    var el = document.getElementById('toast');
-    el.textContent = evt.detail.value;
-    el.classList.add('show');
-    setTimeout(function() {{ el.classList.remove('show'); }}, 2500);
-  }});
-  function toggleRow(tr) {{
-    var next = tr.nextElementSibling;
-    if (next && next.style.display === 'none') next.style.display = 'table-row';
-    else if (next) next.style.display = 'none';
-  }}
-</script>
-</body>
-</html>"##,
-        content
-    )
+fn template(name: &str) -> &'static str {
+    TEMPLATES.get_file(name).unwrap().contents_utf8().unwrap()
 }
 
-/* --- Dashboard ------------------------------------------------------------- */
+fn render(t: &str, params: &[(&str, &str)]) -> String {
+    let mut s = t.to_string();
+    for (k, v) in params {
+        s = s.replace(&format!("{{{}}}", k), v);
+    }
+    s
+}
+
+pub fn page_shell(content: &str) -> String {
+    render(template("page-shell.html"), &[("content", content)])
+}
 
 pub fn dashboard_page(total: usize, hosts: usize, errors: usize) -> String {
-    format!(
-        r##"<h2>Dashboard</h2>
-<div class="stats" id="stats" hx-get="/api/html/dashboard-stats" hx-trigger="every 3s" hx-target="#stats" hx-swap="innerHTML">{}</div>
-<h2>Recent Activity</h2>
-<div id="activity" hx-get="/api/html/activity" hx-trigger="load, every 3s" hx-target="#activity" hx-swap="innerHTML"></div>"##,
-        stats_cards(total, hosts, errors)
-    )
+    let stats = stats_cards(total, hosts, errors);
+    render(template("dashboard-page.html"), &[("stats", &stats)])
 }
 
 pub fn stats_cards(total: usize, hosts: usize, errors: usize) -> String {
-    format!(
-        r##"<div class="stat-card"><div class="value">{total}</div><div class="label">Total Entries</div></div>
-<div class="stat-card"><div class="value">{hosts}</div><div class="label">Unique Hosts</div></div>
-<div class="stat-card"><div class="value">{errors}</div><div class="label">Errors</div></div>"##,
-        total = total,
-        hosts = hosts,
-        errors = errors
+    render(
+        template("dashboard-stats.html"),
+        &[
+            ("total", &total.to_string()),
+            ("hosts", &hosts.to_string()),
+            ("errors", &errors.to_string()),
+        ],
     )
 }
 
 pub fn activity_table(entries: &[LogEntry]) -> String {
     if entries.is_empty() {
-        return r##"<div class="empty">No entries yet.</div>"##.to_string();
+        return render(template("empty-state.html"), &[("message", "No entries yet.")]);
     }
     let rows = activity_rows(entries);
-    format!(
-        r##"<table>
-<thead><tr><th>Time</th><th>Method</th><th>Host</th><th>Status</th><th>Response</th></tr></thead>
-<tbody>{}</tbody>
-</table>"##,
-        rows
-    )
+    render(template("activity-table.html"), &[("rows", &rows)])
 }
 
 fn activity_rows(entries: &[LogEntry]) -> String {
@@ -100,17 +54,8 @@ fn activity_rows(entries: &[LogEntry]) -> String {
         .join("")
 }
 
-/* --- Logs ------------------------------------------------------------------ */
-
 pub fn logs_page() -> String {
-    r##"<h2>Logs</h2>
-<div class="filters">
-  <input type="text" id="filter-search" name="search" placeholder="Search by host, method, status, content type..."
-         hx-get="/api/html/logs" hx-trigger="input delay:500ms" hx-target="#log-table"
-         hx-swap="innerHTML" style="flex:1">
-</div>
-<div id="log-table" hx-get="/api/html/logs" hx-trigger="load, every 3s" hx-target="#log-table"
-     hx-swap="innerHTML" hx-include="#filter-search"></div>"##.to_string()
+    template("logs-page.html").to_string()
 }
 
 pub fn log_rows(entries: &[LogEntry], search: Option<&str>) -> String {
@@ -130,13 +75,13 @@ pub fn log_rows(entries: &[LogEntry], search: Option<&str>) -> String {
     };
 
     if filtered.is_empty() {
-        return r##"<div class="empty">No matching entries.</div>"##.to_string();
+        return render(template("empty-state.html"), &[("message", "No matching entries.")]);
     }
 
     let groups = group_log_entries(&filtered);
 
     if groups.is_empty() {
-        return r##"<div class="empty">No matching entries.</div>"##.to_string();
+        return render(template("empty-state.html"), &[("message", "No matching entries.")]);
     }
 
     let rows: String = groups
@@ -145,16 +90,8 @@ pub fn log_rows(entries: &[LogEntry], search: Option<&str>) -> String {
         .collect::<Vec<_>>()
         .join("");
 
-    format!(
-        r##"<table>
-<thead><tr><th>Time</th><th>Method</th><th>Host</th><th>Status</th><th>Response</th></tr></thead>
-<tbody>{}</tbody>
-</table>"##,
-        rows
-    )
+    render(template("log-table.html"), &[("rows", &rows)])
 }
-
-/* --- Log Helpers ----------------------------------------------------------- */
 
 struct LogGroup {
     request: Option<LogEntry>,
@@ -194,18 +131,28 @@ fn combined_row(g: &LogGroup, show_expanded: bool) -> String {
     let resp = &g.response;
     let err = &g.error;
 
-    let method = req.as_ref().map(|r| match r {
-        LogEntry::Request { method, .. } => method.as_str(),
-        _ => "???",
-    }).unwrap_or_else(|| if err.is_some() { "ERR" } else { "???" });
+    let method = req
+        .as_ref()
+        .map(|r| match r {
+            LogEntry::Request { method, .. } => method.as_str(),
+            _ => "???",
+        })
+        .unwrap_or_else(|| if err.is_some() { "ERR" } else { "???" });
 
-    let host_val = req.as_ref().map(|r| match r {
-        LogEntry::Request { host, .. } => host.as_str(),
-        _ => "-",
-    }).unwrap_or_else(|| err.as_ref().map(|e| match e {
-        LogEntry::Error { client_addr, .. } => client_addr.as_str(),
-        _ => "-",
-    }).unwrap_or("-"));
+    let host_val = req
+        .as_ref()
+        .map(|r| match r {
+            LogEntry::Request { host, .. } => host.as_str(),
+            _ => "-",
+        })
+        .unwrap_or_else(|| {
+            err.as_ref()
+                .map(|e| match e {
+                    LogEntry::Error { client_addr, .. } => client_addr.as_str(),
+                    _ => "-",
+                })
+                .unwrap_or("-")
+        });
 
     let status = resp.as_ref().map(|r| match r {
         LogEntry::Response { status, .. } => *status,
@@ -215,17 +162,27 @@ fn combined_row(g: &LogGroup, show_expanded: bool) -> String {
     let status_display = match status {
         Some(s) => s.to_string(),
         None => {
-            if has_err { "ERR".to_string() } else { "-".to_string() }
+            if has_err {
+                "ERR".to_string()
+            } else {
+                "-".to_string()
+            }
         }
     };
 
-    let content_type = resp.as_ref().and_then(|r| match r {
-        LogEntry::Response { content_type, .. } => Some(content_type.as_str()),
-        _ => None,
-    }).unwrap_or("");
+    let content_type = resp
+        .as_ref()
+        .and_then(|r| match r {
+            LogEntry::Response { content_type, .. } => Some(content_type.as_str()),
+            _ => None,
+        })
+        .unwrap_or("");
 
     let duration = match (&req, &resp) {
-        (Some(LogEntry::Request { ts: req_ts, .. }), Some(LogEntry::Response { ts: resp_ts, .. })) => {
+        (
+            Some(LogEntry::Request { ts: req_ts, .. }),
+            Some(LogEntry::Response { ts: resp_ts, .. }),
+        ) => {
             let d = resp_ts.saturating_sub(*req_ts).max(1);
             format!("{}ms", d)
         }
@@ -238,13 +195,20 @@ fn combined_row(g: &LogGroup, show_expanded: bool) -> String {
         Some(s) if s < 500 => "4xx",
         Some(_) => "5xx",
         None => {
-            if has_err { "error" } else { "request" }
+            if has_err {
+                "error"
+            } else {
+                "request"
+            }
         }
     };
 
     let mut resp_details = String::new();
     if !content_type.is_empty() {
-        resp_details.push_str(&format!(r##"<span class="meta">{}</span> "##, html_esc(content_type)));
+        resp_details.push_str(&format!(
+            r##"<span class="meta">{}</span> "##,
+            html_esc(content_type)
+        ));
     }
     if duration != "-" {
         resp_details.push_str(&format!(r##"<span class="duration">{}</span> "##, duration));
@@ -252,30 +216,63 @@ fn combined_row(g: &LogGroup, show_expanded: bool) -> String {
 
     let details_expanded = if show_expanded {
         let mut d = String::new();
-        if let Some(LogEntry::Request { method, uri, host, user_agent, accept, .. }) = req {
+        if let Some(LogEntry::Request {
+            method,
+            uri,
+            host,
+            user_agent,
+            accept,
+            ..
+        }) = req
+        {
             d.push_str(&format!(
                 r##"<div class="detail-section"><h4>Request</h4><pre>{}</pre></div>"##,
-                html_esc(&serde_json::to_string_pretty(&serde_json::json!({
-                    "method": method, "uri": uri, "host": host,
-                    "user_agent": user_agent, "accept": accept
-                })).unwrap_or_default())
+                html_esc(
+                    &serde_json::to_string_pretty(&serde_json::json!({
+                        "method": method,
+                        "uri": uri,
+                        "host": host,
+                        "user_agent": user_agent,
+                        "accept": accept
+                    }))
+                    .unwrap_or_default()
+                )
             ));
         }
-        if let Some(LogEntry::Response { status, content_type, body_preview, .. }) = resp {
+        if let Some(LogEntry::Response {
+            status,
+            content_type,
+            body_preview,
+            ..
+        }) = resp
+        {
             d.push_str(&format!(
                 r##"<div class="detail-section"><h4>Response</h4><pre>{}</pre></div>"##,
-                html_esc(&serde_json::to_string_pretty(&serde_json::json!({
-                    "status": status, "content_type": content_type,
-                    "body_preview": body_preview
-                })).unwrap_or_default())
+                html_esc(
+                    &serde_json::to_string_pretty(&serde_json::json!({
+                        "status": status,
+                        "content_type": content_type,
+                        "body_preview": body_preview
+                    }))
+                    .unwrap_or_default()
+                )
             ));
         }
-        if let Some(LogEntry::Error { client_addr, error, .. }) = err {
+        if let Some(LogEntry::Error {
+            client_addr,
+            error,
+            ..
+        }) = err
+        {
             d.push_str(&format!(
                 r##"<div class="detail-section"><h4>Error</h4><pre>{}</pre></div>"##,
-                html_esc(&serde_json::to_string_pretty(&serde_json::json!({
-                    "client_addr": client_addr, "error": error
-                })).unwrap_or_default())
+                html_esc(
+                    &serde_json::to_string_pretty(&serde_json::json!({
+                        "client_addr": client_addr,
+                        "error": error
+                    }))
+                    .unwrap_or_default()
+                )
             ));
         }
         d
@@ -283,23 +280,18 @@ fn combined_row(g: &LogGroup, show_expanded: bool) -> String {
         String::new()
     };
 
-    format!(
-        r##"<tr class="combined-row" onclick="toggleRow(this)" style="cursor:pointer">
-  <td>{ts}</td>
-  <td><span class="badge badge-{badge}">{method}</span></td>
-  <td>{host}</td>
-  <td><span class="badge badge-{badge}">{status_display}</span></td>
-  <td>{resp_details}</td>
-</tr>
-<tr class="combined-details" style="display:{details_display}"><td colspan="5">{details}</td></tr>"##,
-        ts = ts,
-        badge = badge_class,
-        method = html_esc(method),
-        host = html_esc(host_val),
-        status_display = html_esc(&status_display),
-        resp_details = resp_details,
-        details_display = if details_expanded.is_empty() { "none" } else { "none" },
-        details = details_expanded,
+    render(
+        template("combined-row.html"),
+        &[
+            ("ts", &ts),
+            ("badge", badge_class),
+            ("method", &html_esc(method)),
+            ("host", &html_esc(host_val)),
+            ("status", &html_esc(&status_display)),
+            ("resp_details", &resp_details),
+            ("details_display", "none"),
+            ("details", &details_expanded),
+        ],
     )
 }
 
@@ -319,52 +311,38 @@ fn html_esc(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-/* --- Config ---------------------------------------------------------------- */
-
 pub fn config_page(config: &Config) -> String {
-    format!(
-        r##"<h2>Configuration</h2>
-<div class="config-section">
-  <h3>Server</h3>
-  <div class="config-row">
-    <label>Port</label>
-    <input type="number" id="cfg-port" name="value" value="{port}" min="1" max="65535"
-           hx-put="/api/html/config/server/port" hx-trigger="change" hx-target="#app" hx-swap="innerHTML">
-  </div>
-  <div class="config-row">
-    <label>Pause</label>
-    <input type="checkbox" id="cfg-pause" name="cfg-pause"{paused}
-           hx-put="/api/html/config/server/pause" hx-trigger="change" hx-target="#app" hx-swap="innerHTML">
-  </div>
-</div>
-<div class="config-section">
-  <h3>Script Rules</h3>
-  <div id="scripts-list">{scripts}</div>
-  <button class="btn btn-primary btn-sm add-row" hx-post="/api/html/config/scripts" hx-target="#scripts-list" hx-swap="innerHTML">+ Add Rule</button>
-</div>
-<div class="config-section">
-  <h3>Response Modifiers</h3>
-  <div id="response-list">{response}</div>
-  <button class="btn btn-primary btn-sm add-row" hx-post="/api/html/config/response" hx-target="#response-list" hx-swap="innerHTML">+ Add Rule</button>
-</div>
-<div class="config-section">
-  <h3>Request Modifiers</h3>
-  <div id="request-list">{request}</div>
-  <button class="btn btn-primary btn-sm add-row" hx-post="/api/html/config/request" hx-target="#request-list" hx-swap="innerHTML">+ Add Rule</button>
-</div>"##,
-        port = config.server.port,
-        paused = if config.server.pause.unwrap_or(false) { " checked" } else { "" },
-        scripts = scripts_section(config.scripts.as_deref().unwrap_or_default()),
-        response = response_section(config.modify_response.as_deref().unwrap_or_default()),
-        request = request_section(config.modify_request.as_deref().unwrap_or_default()),
+    render(
+        template("config-page.html"),
+        &[
+            ("port", &config.server.port.to_string()),
+            (
+                "paused",
+                if config.server.pause.unwrap_or(false) {
+                    " checked"
+                } else {
+                    ""
+                },
+            ),
+            (
+                "scripts",
+                &scripts_section(config.scripts.as_deref().unwrap_or_default()),
+            ),
+            (
+                "response",
+                &response_section(config.modify_response.as_deref().unwrap_or_default()),
+            ),
+            (
+                "request",
+                &request_section(config.modify_request.as_deref().unwrap_or_default()),
+            ),
+        ],
     )
 }
 
-/* --- Script Rules ---------------------------------------------------------- */
-
 pub fn scripts_section(rules: &[ScriptRule]) -> String {
     if rules.is_empty() {
-        return r##"<div class="empty">No script rules configured.</div>"##.to_string();
+        return render(template("empty-state.html"), &[("message", "No script rules configured.")]);
     }
     rules
         .iter()
@@ -375,36 +353,19 @@ pub fn scripts_section(rules: &[ScriptRule]) -> String {
 }
 
 pub fn script_card(idx: usize, r: &ScriptRule) -> String {
-    let domain_esc = html_esc(&r.domain);
-    let scripts_val = html_esc(&r.scripts.join(", "));
-    format!(
-        r##"<div class="rule-card" id="script-card-{idx}">
-  <div class="rule-header">
-    <span class="domain-label">{domain}</span>
-    <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/scripts/{idx}" hx-target="#scripts-list" hx-swap="innerHTML">Remove</button>
-  </div>
-  <div class="config-row">
-    <label>Domain</label>
-    <input type="text" value="{domain}" name="domain"
-           hx-put="/api/html/config/scripts/{idx}" hx-trigger="change" hx-target="#script-card-{idx}" hx-swap="outerHTML">
-  </div>
-  <div class="config-row">
-    <label>Scripts</label>
-    <input type="text" value="{scripts}" name="scripts" placeholder="comma-separated"
-           hx-put="/api/html/config/scripts/{idx}" hx-trigger="change" hx-target="#script-card-{idx}" hx-swap="outerHTML">
-  </div>
-</div>"##,
-        idx = idx,
-        domain = domain_esc,
-        scripts = scripts_val,
+    render(
+        template("script-card.html"),
+        &[
+            ("idx", &idx.to_string()),
+            ("domain", &html_esc(&r.domain)),
+            ("scripts", &html_esc(&r.scripts.join(", "))),
+        ],
     )
 }
 
-/* --- Response Rules -------------------------------------------------------- */
-
 pub fn response_section(rules: &[ResponseModifier]) -> String {
     if rules.is_empty() {
-        return r##"<div class="empty">No response modifiers configured.</div>"##.to_string();
+        return render(template("empty-state.html"), &[("message", "No response modifiers configured.")]);
     }
     rules
         .iter()
@@ -415,7 +376,6 @@ pub fn response_section(rules: &[ResponseModifier]) -> String {
 }
 
 pub fn response_card(idx: usize, r: &ResponseModifier) -> String {
-    let domain_esc = html_esc(&r.domain);
     let csp_opts = csp_options(r.csp.as_deref());
     let inject_opts = inject_options(r.inject_at.as_deref());
 
@@ -439,50 +399,22 @@ pub fn response_card(idx: usize, r: &ResponseModifier) -> String {
         None => String::new(),
     };
 
-    format!(
-        r##"<div class="rule-card" id="response-card-{idx}">
-  <div class="rule-header">
-    <span class="domain-label">{domain}</span>
-    <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/response/{idx}" hx-target="#response-list" hx-swap="innerHTML">Remove</button>
-  </div>
-  <div class="config-row">
-    <label>Domain</label>
-    <input type="text" value="{domain}" name="domain"
-           hx-put="/api/html/config/response/{idx}" hx-trigger="change" hx-target="#response-card-{idx}" hx-swap="outerHTML">
-  </div>
-  <div class="config-row">
-    <label>CSP</label>
-    <select name="csp" hx-put="/api/html/config/response/{idx}" hx-trigger="change" hx-target="#response-card-{idx}" hx-swap="outerHTML">
-{csp}
-    </select>
-  </div>
-  <div class="config-row"><label>Remove Headers</label></div>
-  <div id="response-remove-headers-{idx}">{remove_headers}</div>
-  <button class="btn btn-sm btn-secondary" hx-post="/api/html/config/response/{idx}/remove-headers" hx-target="#response-card-{idx}" hx-swap="outerHTML">+ Add Header to Remove</button>
-  <div class="config-row config-row-gap">
-    <label>Inject At</label>
-    <select name="inject_at" hx-put="/api/html/config/response/{idx}" hx-trigger="change" hx-target="#response-card-{idx}" hx-swap="outerHTML">
-{inject}
-    </select>
-  </div>
-  <div class="config-row config-row-gap"><label>Add Headers</label></div>
-  <div id="response-headers-{idx}">{headers}</div>
-  <button class="btn btn-sm btn-secondary" hx-post="/api/html/config/response/{idx}/headers" hx-target="#response-card-{idx}" hx-swap="outerHTML">+ Add Header</button>
-</div>"##,
-        idx = idx,
-        domain = domain_esc,
-        csp = csp_opts,
-        remove_headers = remove_headers_html,
-        inject = inject_opts,
-        headers = headers_html,
+    render(
+        template("response-card.html"),
+        &[
+            ("idx", &idx.to_string()),
+            ("domain", &html_esc(&r.domain)),
+            ("csp", &csp_opts),
+            ("remove_headers", &remove_headers_html),
+            ("inject", &inject_opts),
+            ("headers", &headers_html),
+        ],
     )
 }
 
-/* --- Request Rules --------------------------------------------------------- */
-
 pub fn request_section(rules: &[RequestModifier]) -> String {
     if rules.is_empty() {
-        return r##"<div class="empty">No request modifiers configured.</div>"##.to_string();
+        return render(template("empty-state.html"), &[("message", "No request modifiers configured.")]);
     }
     rules
         .iter()
@@ -493,8 +425,6 @@ pub fn request_section(rules: &[RequestModifier]) -> String {
 }
 
 pub fn request_card(idx: usize, r: &RequestModifier) -> String {
-    let domain_esc = html_esc(&r.domain);
-
     let remove_headers_html = match &r.remove_headers {
         Some(hs) => hs
             .iter()
@@ -515,115 +445,67 @@ pub fn request_card(idx: usize, r: &RequestModifier) -> String {
         None => String::new(),
     };
 
-    format!(
-        r##"<div class="rule-card" id="request-card-{idx}">
-  <div class="rule-header">
-    <span class="domain-label">{domain}</span>
-    <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/request/{idx}" hx-target="#request-list" hx-swap="innerHTML">Remove</button>
-  </div>
-  <div class="config-row">
-    <label>Domain</label>
-    <input type="text" value="{domain}" name="domain"
-           hx-put="/api/html/config/request/{idx}" hx-trigger="change" hx-target="#request-card-{idx}" hx-swap="outerHTML">
-  </div>
-  <div class="config-row"><label>Remove Headers</label></div>
-  <div id="request-remove-headers-{idx}">{remove_headers}</div>
-  <button class="btn btn-sm btn-secondary" hx-post="/api/html/config/request/{idx}/remove-headers" hx-target="#request-card-{idx}" hx-swap="outerHTML">+ Add Header to Remove</button>
-  <div class="config-row config-row-gap"><label>Add Headers</label></div>
-  <div id="request-headers-{idx}">{headers}</div>
-  <button class="btn btn-sm btn-secondary" hx-post="/api/html/config/request/{idx}/headers" hx-target="#request-card-{idx}" hx-swap="outerHTML">+ Add Header</button>
-</div>"##,
-        idx = idx,
-        domain = domain_esc,
-        remove_headers = remove_headers_html,
-        headers = headers_html,
+    render(
+        template("request-card.html"),
+        &[
+            ("idx", &idx.to_string()),
+            ("domain", &html_esc(&r.domain)),
+            ("remove_headers", &remove_headers_html),
+            ("headers", &headers_html),
+        ],
     )
 }
 
-/* --- Shared Config Helpers ------------------------------------------------- */
-
 fn csp_options(current: Option<&str>) -> String {
-    let opts = [
-        ("", "(none)"),
-        ("remove_nonce", "remove_nonce"),
-        ("remove_all", "remove_all"),
-        ("relax_connect_src", "relax_connect_src"),
-        ("keep", "keep"),
-    ];
-    opts.iter()
-        .map(|(val, label)| {
-            let selected = if current == Some(val) {
-                " selected"
-            } else {
-                ""
-            };
-            format!(
-                r##"        <option value="{}"{}>{}</option>"##,
-                html_esc(val),
-                selected,
-                html_esc(label)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    render(
+        template("csp-options.html"),
+        &[
+            ("csp_none", if current.is_none() || current == Some("") { " selected" } else { "" }),
+            ("csp_remove_nonce", if current == Some("remove_nonce") { " selected" } else { "" }),
+            ("csp_remove_all", if current == Some("remove_all") { " selected" } else { "" }),
+            ("csp_relax_connect_src", if current == Some("relax_connect_src") { " selected" } else { "" }),
+            ("csp_keep", if current == Some("keep") { " selected" } else { "" }),
+        ],
+    )
 }
 
 fn inject_options(current: Option<&str>) -> String {
-    let opts = [
-        ("", "(default)"),
-        ("head_end", "head_end"),
-        ("body_end", "body_end"),
-        ("html_end", "html_end"),
-        ("append", "append"),
-    ];
-    opts.iter()
-        .map(|(val, label)| {
-            let selected = if current == Some(val) {
-                " selected"
-            } else {
-                ""
-            };
-            format!(
-                r##"        <option value="{}"{}>{}</option>"##,
-                html_esc(val),
-                selected,
-                html_esc(label)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    render(
+        template("inject-options.html"),
+        &[
+            ("inject_default", if current.is_none() || current == Some("") { " selected" } else { "" }),
+            ("inject_head_end", if current == Some("head_end") { " selected" } else { "" }),
+            ("inject_body_end", if current == Some("body_end") { " selected" } else { "" }),
+            ("inject_html_end", if current == Some("html_end") { " selected" } else { "" }),
+            ("inject_append", if current == Some("append") { " selected" } else { "" }),
+        ],
+    )
 }
 
 fn header_pair_row(ty: &str, idx: usize, _hi: usize, key: &str, val: &str) -> String {
     let ty_lower = ty.to_lowercase();
-    format!(
-        r##"<div class="header-pair config-row">
-  <input type="text" value="{key}" name="{key}" placeholder="Name"
-         hx-put="/api/html/config/{ty_lower}/{idx}/headers/key" hx-trigger="change" hx-target="#{ty_lower}-card-{idx}" hx-swap="outerHTML">
-  <span>=</span>
-  <input type="text" value="{val}" name="{key}" placeholder="Value"
-         hx-put="/api/html/config/{ty_lower}/{idx}/headers/val" hx-trigger="change" hx-target="#{ty_lower}-card-{idx}" hx-swap="outerHTML">
-  <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/{ty_lower}/{idx}/headers/{key_url}" hx-target="#{ty_lower}-card-{idx}" hx-swap="outerHTML">x</button>
-</div>"##,
-        ty_lower = ty_lower,
-        idx = idx,
-        key = html_esc(key),
-        key_url = urlencode(key),
-        val = html_esc(val),
+    render(
+        template("header-pair.html"),
+        &[
+            ("ty", ty),
+            ("ty_lower", &ty_lower),
+            ("idx", &idx.to_string()),
+            ("key", &html_esc(key)),
+            ("key_url", &urlencode(key)),
+            ("val", &html_esc(val)),
+        ],
     )
 }
 
 fn remove_header_row(ty: &str, idx: usize, hi: usize, val: &str) -> String {
-    format!(
-        r##"<div class="header-pair config-row">
-  <input type="text" value="{val}" placeholder="Header name"
-         hx-put="/api/html/config/{ty}/{idx}/remove-headers/{hi}" hx-trigger="change" hx-target="#{ty}-card-{idx}" hx-swap="outerHTML">
-  <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/{ty}/{idx}/remove-headers/{hi}" hx-target="#{ty}-card-{idx}" hx-swap="outerHTML">x</button>
-</div>"##,
-        ty = ty,
-        idx = idx,
-        hi = hi,
-        val = html_esc(val),
+    render(
+        template("remove-header.html"),
+        &[
+            ("ty", ty),
+            ("idx", &idx.to_string()),
+            ("hi", &hi.to_string()),
+            ("val", &html_esc(val)),
+        ],
     )
 }
 

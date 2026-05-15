@@ -1,0 +1,5 @@
+<div class="header-pair config-row">
+  <input type="text" value="{val}" placeholder="Header name"
+         hx-put="/api/html/config/{ty}/{idx}/remove-headers/{hi}" hx-trigger="change" hx-target="#{ty}-card-{idx}" hx-swap="outerHTML">
+  <button class="btn btn-danger btn-sm" hx-delete="/api/html/config/{ty}/{idx}/remove-headers/{hi}" hx-target="#{ty}-card-{idx}" hx-swap="outerHTML">x</button>
+</div>

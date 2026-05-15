@@ -14,7 +14,7 @@
   <a href="/logs" class="nav-link" hx-get="/logs" hx-target="#app" hx-push-url="true">Logs</a>
   <a href="/config" class="nav-link" hx-get="/config" hx-target="#app" hx-push-url="true">Config</a>
 </nav>
-<div id="app"></div>
+<div id="app">{content}</div>
 <div id="toast" class="toast"></div>
 <script>
   htmx.config.defaultSwap = "innerHTML";

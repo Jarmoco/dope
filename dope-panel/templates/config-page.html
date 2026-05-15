@@ -1,0 +1,29 @@
+<h2>Configuration</h2>
+<div class="config-section">
+  <h3>Server</h3>
+  <div class="config-row">
+    <label>Port</label>
+    <input type="number" id="cfg-port" name="value" value="{port}" min="1" max="65535"
+           hx-put="/api/html/config/server/port" hx-trigger="change" hx-target="#app" hx-swap="innerHTML">
+  </div>
+  <div class="config-row">
+    <label>Pause</label>
+    <input type="checkbox" id="cfg-pause" name="cfg-pause"{paused}
+           hx-put="/api/html/config/server/pause" hx-trigger="change" hx-target="#app" hx-swap="innerHTML">
+  </div>
+</div>
+<div class="config-section">
+  <h3>Script Rules</h3>
+  <div id="scripts-list">{scripts}</div>
+  <button class="btn btn-primary btn-sm add-row" hx-post="/api/html/config/scripts" hx-target="#scripts-list" hx-swap="innerHTML">+ Add Rule</button>
+</div>
+<div class="config-section">
+  <h3>Response Modifiers</h3>
+  <div id="response-list">{response}</div>
+  <button class="btn btn-primary btn-sm add-row" hx-post="/api/html/config/response" hx-target="#response-list" hx-swap="innerHTML">+ Add Rule</button>
+</div>
+<div class="config-section">
+  <h3>Request Modifiers</h3>
+  <div id="request-list">{request}</div>
+  <button class="btn btn-primary btn-sm add-row" hx-post="/api/html/config/request" hx-target="#request-list" hx-swap="innerHTML">+ Add Rule</button>
+</div>

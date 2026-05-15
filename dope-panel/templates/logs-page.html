@@ -1,0 +1,8 @@
+<h2>Logs</h2>
+<div class="filters">
+  <input type="text" id="filter-search" name="search" placeholder="Search by host, method, status, content type..."
+         hx-get="/api/html/logs" hx-trigger="input delay:500ms" hx-target="#log-table"
+         hx-swap="innerHTML" style="flex:1">
+</div>
+<div id="log-table" hx-get="/api/html/logs" hx-trigger="load, every 3s" hx-target="#log-table"
+     hx-swap="innerHTML" hx-include="#filter-search"></div>
