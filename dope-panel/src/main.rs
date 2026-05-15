@@ -5,6 +5,7 @@
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 use axum::{
     extract::Query,
@@ -24,6 +25,56 @@ mod html;
 
 #[tokio::main]
 async fn main() {
+    /* --- CLI argument parsing ---------------------------------------------- */
+
+    let mut scripts_dir = PathBuf::from("scripts");
+    let mut logs_dir = PathBuf::from("logs");
+    let mut config_path = PathBuf::from("config.toml");
+
+    let args: Vec<String> = std::env::args().collect();
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-h" | "--help" => {
+                println!("dope-panel — Web admin panel for dope proxy");
+                println!();
+                println!("USAGE:");
+                println!("  dope-panel [OPTIONS]");
+                println!();
+                println!("OPTIONS:");
+                println!("  -h, --help          Print this help message");
+                println!("  --scripts <path>    Userscript directory       [default: scripts]");
+                println!("  --logs <path>       Log output directory       [default: logs]");
+                println!("  --config <path>     Configuration file path    [default: config.toml]");
+                println!();
+                return;
+            }
+            "--scripts" if i + 1 < args.len() => {
+                i += 1;
+                scripts_dir = PathBuf::from(&args[i]);
+            }
+            "--logs" if i + 1 < args.len() => {
+                i += 1;
+                logs_dir = PathBuf::from(&args[i]);
+            }
+            "--config" if i + 1 < args.len() => {
+                i += 1;
+                config_path = PathBuf::from(&args[i]);
+            }
+            _ => {
+                eprintln!("Unknown option: {} (use --help for usage)", args[i]);
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    dope_core::init_dirs(dope_core::Dirs {
+        config: config_path,
+        scripts: scripts_dir,
+        logs: logs_dir,
+    });
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::*;
 
@@ -158,18 +159,47 @@ impl Config {
     }
 }
 
+/* --- Directory Configuration ----------------------------------------------- */
+
+#[derive(Clone)]
+pub struct Dirs {
+    pub config: PathBuf,
+    pub scripts: PathBuf,
+    pub logs: PathBuf,
+}
+
+impl Default for Dirs {
+    fn default() -> Self {
+        Self {
+            config: PathBuf::from("config.toml"),
+            scripts: PathBuf::from("scripts"),
+            logs: PathBuf::from("logs"),
+        }
+    }
+}
+
+static DIRS: OnceLock<Dirs> = OnceLock::new();
+
+pub fn init_dirs(dirs: Dirs) {
+    DIRS.set(dirs).ok();
+}
+
+pub fn dirs() -> Dirs {
+    DIRS.get().cloned().unwrap_or_default()
+}
+
 /* --- Paths ----------------------------------------------------------------- */
 
 pub fn config_path() -> PathBuf {
-    PathBuf::from("config.toml")
+    dirs().config
 }
 
 pub fn trace_path() -> PathBuf {
-    PathBuf::from("logs/dope-traces.jsonl")
+    dirs().logs.join("dope-traces.jsonl")
 }
 
 pub fn list_available_scripts() -> Vec<String> {
-    let path = std::path::Path::new("scripts");
+    let path = dirs().scripts;
     if !path.is_dir() {
         return vec![];
     }

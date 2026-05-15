@@ -18,8 +18,8 @@
 use std::fmt;
 
 pub fn read_script(name: &str) -> Result<String, ScriptError> {
-    let path = format!("./scripts/{}.user.js", name);
-    std::fs::read_to_string(&path).map_err(|e| ScriptError { path, source: e })
+    let path = dope_core::dirs().scripts.join(format!("{}.user.js", name));
+    std::fs::read_to_string(&path).map_err(|e| ScriptError { path: path.display().to_string(), source: e })
 }
 
 
