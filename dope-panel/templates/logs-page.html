@@ -4,5 +4,5 @@
          hx-get="/api/html/logs" hx-trigger="input delay:500ms" hx-target="#log-table"
          hx-swap="innerHTML" style="flex:1">
 </div>
-<div id="log-table" hx-get="/api/html/logs" hx-trigger="load, every 3s" hx-target="#log-table"
+<div id="log-table" hx-get="/api/html/logs" hx-trigger="load" hx-target="#log-table"
      hx-swap="innerHTML" hx-include="#filter-search"></div>

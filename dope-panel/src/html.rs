@@ -68,12 +68,17 @@ pub fn log_rows(entries: &[LogEntry], search: Option<&str>) -> String {
     let filtered = match search {
         Some(q) if !q.is_empty() => {
             let q = q.to_lowercase();
-            entries
+            let matching_ids: std::collections::HashSet<String> = entries
                 .iter()
                 .filter(|e| {
                     let s = serde_json::to_string(e).unwrap_or_default();
                     s.to_lowercase().contains(&q)
                 })
+                .map(|e| e.req_id().to_string())
+                .collect();
+            entries
+                .iter()
+                .filter(|e| matching_ids.contains(&e.req_id().to_string()))
                 .cloned()
                 .collect::<Vec<_>>()
         }

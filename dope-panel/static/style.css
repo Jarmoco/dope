@@ -452,6 +452,14 @@ pre {
 
 .detail-section pre {
   margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  word-break: break-all;
+}
+
+.combined-details td {
+  max-width: 0;
+  overflow-x: auto;
 }
 
 .domain-card {
