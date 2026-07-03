@@ -98,6 +98,7 @@ pub fn log_entry_count() -> usize {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
+    pub log: Option<LogConfig>,
     pub scripts: Option<Vec<ScriptRule>>,
     pub modify_response: Option<Vec<ResponseModifier>>,
     pub modify_request: Option<Vec<RequestModifier>>,
@@ -107,6 +108,12 @@ pub struct Config {
 pub struct ServerConfig {
     pub port: u16,
     pub pause: Option<bool>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct LogConfig {
+    pub enabled: Option<bool>,
+    pub max_size: Option<u64>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Default)]
@@ -134,6 +141,17 @@ pub struct RequestModifier {
 /* --- Config Lookups -------------------------------------------------------- */
 
 impl Config {
+    pub fn log_enabled(&self) -> bool {
+        self.log.as_ref().and_then(|l| l.enabled).unwrap_or(true)
+    }
+
+    pub fn log_max_size(&self) -> u64 {
+        self.log
+            .as_ref()
+            .and_then(|l| l.max_size)
+            .unwrap_or(10 * 1024 * 1024)
+    }
+
     pub fn get_scripts_for_domain(&self, domain: &str) -> Vec<String> {
         let mut result = Vec::new();
         if let Some(scripts) = &self.scripts {
@@ -239,6 +257,10 @@ pub fn create_default_config() -> Result<(), Box<dyn std::error::Error>> {
 port = 8080
 # pause = true        # stop all injection and manipulation (default: false)
 
+# [log]
+# enabled = true      # set to false to disable request/response logging
+# max_size = 10485760 # rotate log when it exceeds this many bytes (10 MB)
+
 
 # -----------------------------------------------------------------------------
 # SCRIPTS
@@ -315,6 +337,7 @@ pub fn load_config() -> Config {
         error!("Failed to create default config: {}", e);
         return Config {
             server: ServerConfig { port: 8080, pause: None },
+            log: None,
             scripts: None,
             modify_response: None,
             modify_request: None,
@@ -327,6 +350,7 @@ pub fn load_config() -> Config {
             error!("Failed to read {}: {}", path.display(), e);
             return Config {
                 server: ServerConfig { port: 8080, pause: None },
+                log: None,
                 scripts: None,
                 modify_response: None,
                 modify_request: None,
@@ -340,6 +364,7 @@ pub fn load_config() -> Config {
             error!("Failed to parse {}: {}", path.display(), e);
             Config {
                 server: ServerConfig { port: 8080, pause: None },
+                log: None,
                 scripts: None,
                 modify_response: None,
                 modify_request: None,
@@ -372,14 +397,33 @@ fn ensure_log_directory() -> Result<(), std::io::Error> {
 }
 
 pub fn append_entry(value: &LogEntry) {
+    let cfg = load_config();
+    if !cfg.log_enabled() {
+        return;
+    }
+
     if let Err(e) = ensure_log_directory() {
         error!("Failed to create log directory: {}", e);
         return;
     }
+
+    let path = trace_path();
+    // ponytail: check file size every write — simple enough, add periodic check if perf matters
+    let max_size = cfg.log_max_size();
+    if path.exists() {
+        if let Ok(meta) = std::fs::metadata(&path) {
+            if meta.len() > max_size {
+                if let Err(e) = std::fs::write(&path, "") {
+                    error!("Failed to truncate log file: {}", e);
+                }
+            }
+        }
+    }
+
     if let Err(e) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(trace_path())
+        .open(&path)
         .and_then(|mut file| {
             let line = serde_json::to_string(value).unwrap_or_default();
             use std::io::Write;

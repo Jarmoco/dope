@@ -16,6 +16,7 @@ async fn load_config() -> dope_core::Config {
                 port: 8080,
                 pause: None,
             },
+            log: None,
             scripts: None,
             modify_response: None,
             modify_request: None,
@@ -58,15 +59,39 @@ pub async fn update_server_port(Form(body): Form<HashMap<String, String>>) -> im
     ok_html_with_toast(html::config_page(&config), "Port updated")
 }
 
-pub async fn update_server_pause(body: String) -> impl IntoResponse {
+pub async fn update_server_pause() -> impl IntoResponse {
     let mut config = load_config().await;
-    config.server.pause = if body.contains("cfg-pause") {
-        Some(true)
-    } else {
-        None
-    };
+    let paused = !config.server.pause.unwrap_or(false);
+    config.server.pause = Some(paused);
     save_config(&config).await;
     ok_html_with_toast(html::config_page(&config), "Pause toggled")
+}
+
+/* --- Log Config ------------------------------------------------------------ */
+
+pub async fn update_log_enabled() -> impl IntoResponse {
+    let mut config = load_config().await;
+    let enabled = !config.log_enabled();
+    config.log.get_or_insert(dope_core::LogConfig {
+        enabled: None,
+        max_size: None,
+    }).enabled = Some(enabled);
+    save_config(&config).await;
+    ok_html_with_toast(html::config_page(&config), "Logging toggled")
+}
+
+pub async fn update_log_max_size(Form(body): Form<HashMap<String, String>>) -> impl IntoResponse {
+    let mut config = load_config().await;
+    if let Some(size_str) = body.get("value") {
+        if let Ok(size) = size_str.parse::<u64>() {
+            config.log.get_or_insert(dope_core::LogConfig {
+                enabled: None,
+                max_size: None,
+            }).max_size = Some(size);
+        }
+    }
+    save_config(&config).await;
+    ok_html_with_toast(html::config_page(&config), "Max log size updated")
 }
 
 /* --- Domain CRUD ----------------------------------------------------------- */

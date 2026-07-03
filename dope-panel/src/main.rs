@@ -106,6 +106,15 @@ async fn main() {
             "/api/html/config/server/pause",
             put(config_routes::update_server_pause),
         )
+        // Log config
+        .route(
+            "/api/html/config/log/enabled",
+            put(config_routes::update_log_enabled),
+        )
+        .route(
+            "/api/html/config/log/max-size",
+            put(config_routes::update_log_max_size),
+        )
         // Domain CRUD
         .route(
             "/api/html/config/domain",
@@ -279,6 +288,7 @@ async fn serve_config(headers: HeaderMap) -> Response {
                 port: 8080,
                 pause: None,
             },
+            log: None,
             scripts: None,
             modify_response: None,
             modify_request: None,
@@ -326,6 +336,7 @@ async fn get_config() -> Json<Config> {
                 port: 8080,
                 pause: None,
             },
+            log: None,
             scripts: None,
             modify_response: None,
             modify_request: None,

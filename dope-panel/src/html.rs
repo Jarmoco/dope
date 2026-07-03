@@ -337,6 +337,15 @@ pub fn config_page(config: &Config) -> String {
                     ""
                 },
             ),
+            (
+                "log_enabled",
+                if config.log_enabled() {
+                    " checked"
+                } else {
+                    ""
+                },
+            ),
+            ("log_max_size", &config.log_max_size().to_string()),
             ("domain_cards", &domain_list(config)),
         ],
     )
