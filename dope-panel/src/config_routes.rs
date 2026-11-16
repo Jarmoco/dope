@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use axum::extract::Path;
 use axum::Form;
-use axum::http::{header, StatusCode};
+use axum::extract::Path;
+use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use dope_core;
 
@@ -11,16 +11,7 @@ use crate::html;
 async fn load_config() -> dope_core::Config {
     tokio::task::spawn_blocking(dope_core::load_config)
         .await
-        .unwrap_or_else(|_| dope_core::Config {
-            server: dope_core::ServerConfig {
-                port: 8080,
-                pause: None,
-            },
-            log: None,
-            scripts: None,
-            modify_response: None,
-            modify_request: None,
-        })
+        .unwrap_or_else(|_| dope_core::Config::default())
 }
 
 async fn save_config(config: &dope_core::Config) -> bool {
@@ -67,15 +58,56 @@ pub async fn update_server_pause() -> impl IntoResponse {
     ok_html_with_toast(html::config_page(&config), "Pause toggled")
 }
 
+pub async fn update_server_intercept(
+    Form(body): Form<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let mut config = load_config().await;
+    let mode = match body.get("value").map(String::as_str) {
+        Some("all") => "all",
+        Some("none") => "none",
+        _ => "configured",
+    };
+    config.server.intercept = Some(mode.to_string());
+    save_config(&config).await;
+    ok_html_with_toast(html::config_page(&config), "Intercept mode updated")
+}
+
+pub async fn update_server_passthrough(
+    Form(body): Form<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let mut config = load_config().await;
+    let mut hosts: Vec<String> = body
+        .get("value")
+        .map(|value| {
+            value
+                .lines()
+                .flat_map(|line| line.split(','))
+                .map(|host| host.trim().to_ascii_lowercase())
+                .filter(|host| !host.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    hosts.sort();
+    hosts.dedup();
+    config.server.passthrough = if hosts.is_empty() { None } else { Some(hosts) };
+
+    save_config(&config).await;
+    ok_html_with_toast(html::config_page(&config), "Passthrough hosts updated")
+}
+
 /* --- Log Config ------------------------------------------------------------ */
 
 pub async fn update_log_enabled() -> impl IntoResponse {
     let mut config = load_config().await;
     let enabled = !config.log_enabled();
-    config.log.get_or_insert(dope_core::LogConfig {
-        enabled: None,
-        max_size: None,
-    }).enabled = Some(enabled);
+    config
+        .log
+        .get_or_insert(dope_core::LogConfig {
+            enabled: None,
+            max_size: None,
+        })
+        .enabled = Some(enabled);
     save_config(&config).await;
     ok_html_with_toast(html::config_page(&config), "Logging toggled")
 }
@@ -84,10 +116,13 @@ pub async fn update_log_max_size(Form(body): Form<HashMap<String, String>>) -> i
     let mut config = load_config().await;
     if let Some(size_str) = body.get("value") {
         if let Ok(size) = size_str.parse::<u64>() {
-            config.log.get_or_insert(dope_core::LogConfig {
-                enabled: None,
-                max_size: None,
-            }).max_size = Some(size);
+            config
+                .log
+                .get_or_insert(dope_core::LogConfig {
+                    enabled: None,
+                    max_size: None,
+                })
+                .max_size = Some(size);
         }
     }
     save_config(&config).await;
@@ -172,10 +207,7 @@ pub async fn add_domain_script(Path(domain): Path<String>) -> impl IntoResponse 
     }
 
     save_config(&config).await;
-    ok_html_with_toast(
-        html::domain_card(&config, &domain, true),
-        "Script added",
-    )
+    ok_html_with_toast(html::domain_card(&config, &domain, true), "Script added")
 }
 
 pub async fn update_domain_script(
@@ -189,7 +221,11 @@ pub async fn update_domain_script(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(rule_idx) = rule_idx {
-        if let Some(rule) = config.scripts.as_mut().and_then(|rules| rules.get_mut(rule_idx)) {
+        if let Some(rule) = config
+            .scripts
+            .as_mut()
+            .and_then(|rules| rules.get_mut(rule_idx))
+        {
             if idx < rule.scripts.len() {
                 if let Some(name) = body.get("name") {
                     rule.scripts[idx] = name.clone();
@@ -199,15 +235,10 @@ pub async fn update_domain_script(
     }
 
     save_config(&config).await;
-    ok_html_with_toast(
-        html::domain_card(&config, &domain, true),
-        "Script updated",
-    )
+    ok_html_with_toast(html::domain_card(&config, &domain, true), "Script updated")
 }
 
-pub async fn remove_domain_script(
-    Path((domain, idx)): Path<(String, usize)>,
-) -> impl IntoResponse {
+pub async fn remove_domain_script(Path((domain, idx)): Path<(String, usize)>) -> impl IntoResponse {
     let mut config = load_config().await;
     let rule_idx = config
         .scripts
@@ -215,7 +246,11 @@ pub async fn remove_domain_script(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(rule_idx) = rule_idx {
-        if let Some(rule) = config.scripts.as_mut().and_then(|rules| rules.get_mut(rule_idx)) {
+        if let Some(rule) = config
+            .scripts
+            .as_mut()
+            .and_then(|rules| rules.get_mut(rule_idx))
+        {
             if idx < rule.scripts.len() {
                 rule.scripts.remove(idx);
             }
@@ -223,10 +258,7 @@ pub async fn remove_domain_script(
     }
 
     save_config(&config).await;
-    ok_html_with_toast(
-        html::domain_card(&config, &domain, true),
-        "Script removed",
-    )
+    ok_html_with_toast(html::domain_card(&config, &domain, true), "Script removed")
 }
 
 /* --- Domain Response Modifiers --------------------------------------------- */
@@ -244,11 +276,10 @@ pub async fn update_domain_response(
 
     match idx {
         Some(idx) => {
-            if let Some(rule) =
-                config
-                    .modify_response
-                    .as_mut()
-                    .and_then(|rules| rules.get_mut(idx))
+            if let Some(rule) = config
+                .modify_response
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
             {
                 for (field, value) in &body {
                     match field.as_str() {
@@ -276,9 +307,19 @@ pub async fn update_domain_response(
             let mut inject_at = None;
             for (field, value) in &body {
                 match field.as_str() {
-                    "csp" => csp = if value.is_empty() { None } else { Some(value.clone()) },
+                    "csp" => {
+                        csp = if value.is_empty() {
+                            None
+                        } else {
+                            Some(value.clone())
+                        }
+                    }
                     "inject_at" => {
-                        inject_at = if value.is_empty() { None } else { Some(value.clone()) }
+                        inject_at = if value.is_empty() {
+                            None
+                        } else {
+                            Some(value.clone())
+                        }
                     }
                     _ => {}
                 }
@@ -313,20 +354,19 @@ pub async fn add_domain_response_header(Path(domain): Path<String>) -> impl Into
 
     match idx {
         Some(idx) => {
-            if let Some(rule) =
-                config
-                    .modify_response
-                    .as_mut()
-                    .and_then(|rules| rules.get_mut(idx))
+            if let Some(rule) = config
+                .modify_response
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
             {
                 let headers = rule.add_headers.get_or_insert_with(HashMap::new);
                 let n = headers.len();
-                headers.insert(format!("key{}", n), "value".to_string());
+                headers.insert(format!("x-new-header-{n}"), String::new());
             }
         }
         None => {
             let mut headers = HashMap::new();
-            headers.insert("key0".to_string(), "value".to_string());
+            headers.insert("x-new-header-0".to_string(), String::new());
             config
                 .modify_response
                 .get_or_insert_with(Vec::new)
@@ -355,11 +395,10 @@ pub async fn remove_domain_response_header(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_response
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_response
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.add_headers {
                 headers.remove(&key);
@@ -385,11 +424,10 @@ pub async fn update_domain_response_header_key(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_response
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_response
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.add_headers {
                 for (old_key, new_key) in &body {
@@ -419,11 +457,10 @@ pub async fn update_domain_response_header_val(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_response
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_response
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.add_headers {
                 for (key, new_val) in &body {
@@ -453,11 +490,10 @@ pub async fn add_domain_response_remove_header(Path(domain): Path<String>) -> im
 
     match idx {
         Some(idx) => {
-            if let Some(rule) =
-                config
-                    .modify_response
-                    .as_mut()
-                    .and_then(|rules| rules.get_mut(idx))
+            if let Some(rule) = config
+                .modify_response
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
             {
                 rule.remove_headers
                     .get_or_insert_with(Vec::new)
@@ -493,11 +529,10 @@ pub async fn remove_domain_response_remove_header(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_response
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_response
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.remove_headers {
                 if hi < headers.len() {
@@ -525,11 +560,10 @@ pub async fn update_domain_response_remove_header(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_response
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_response
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.remove_headers {
                 if hi < headers.len() {
@@ -559,20 +593,19 @@ pub async fn add_domain_request_header(Path(domain): Path<String>) -> impl IntoR
 
     match idx {
         Some(idx) => {
-            if let Some(rule) =
-                config
-                    .modify_request
-                    .as_mut()
-                    .and_then(|rules| rules.get_mut(idx))
+            if let Some(rule) = config
+                .modify_request
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
             {
                 let headers = rule.add_headers.get_or_insert_with(HashMap::new);
                 let n = headers.len();
-                headers.insert(format!("key{}", n), "value".to_string());
+                headers.insert(format!("x-new-header-{n}"), String::new());
             }
         }
         None => {
             let mut headers = HashMap::new();
-            headers.insert("key0".to_string(), "value".to_string());
+            headers.insert("x-new-header-0".to_string(), String::new());
             config
                 .modify_request
                 .get_or_insert_with(Vec::new)
@@ -601,11 +634,10 @@ pub async fn remove_domain_request_header(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_request
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_request
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.add_headers {
                 headers.remove(&key);
@@ -631,11 +663,10 @@ pub async fn update_domain_request_header_key(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_request
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_request
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.add_headers {
                 for (old_key, new_key) in &body {
@@ -665,11 +696,10 @@ pub async fn update_domain_request_header_val(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_request
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_request
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.add_headers {
                 for (key, new_val) in &body {
@@ -699,11 +729,10 @@ pub async fn add_domain_request_remove_header(Path(domain): Path<String>) -> imp
 
     match idx {
         Some(idx) => {
-            if let Some(rule) =
-                config
-                    .modify_request
-                    .as_mut()
-                    .and_then(|rules| rules.get_mut(idx))
+            if let Some(rule) = config
+                .modify_request
+                .as_mut()
+                .and_then(|rules| rules.get_mut(idx))
             {
                 rule.remove_headers
                     .get_or_insert_with(Vec::new)
@@ -739,11 +768,10 @@ pub async fn remove_domain_request_remove_header(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_request
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_request
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.remove_headers {
                 if hi < headers.len() {
@@ -771,11 +799,10 @@ pub async fn update_domain_request_remove_header(
         .and_then(|rules| rules.iter().position(|r| r.domain == domain));
 
     if let Some(idx) = idx {
-        if let Some(rule) =
-            config
-                .modify_request
-                .as_mut()
-                .and_then(|rules| rules.get_mut(idx))
+        if let Some(rule) = config
+            .modify_request
+            .as_mut()
+            .and_then(|rules| rules.get_mut(idx))
         {
             if let Some(ref mut headers) = rule.remove_headers {
                 if hi < headers.len() {
@@ -792,4 +819,63 @@ pub async fn update_domain_request_remove_header(
         html::domain_card(&config, &domain, true),
         "Remove-header updated",
     )
+}
+
+/* --- Tests ----------------------------------------------------------------- */
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_dirs() -> dope_core::Dirs {
+        let root = std::env::temp_dir().join(format!(
+            "dope-panel-config-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("scripts")).unwrap();
+        std::fs::create_dir_all(root.join("logs")).unwrap();
+
+        dope_core::Dirs {
+            config: root.join("config.toml"),
+            scripts: root.join("scripts"),
+            logs: root.join("logs"),
+        }
+    }
+
+    #[tokio::test]
+    async fn panel_can_fix_legacy_config() {
+        let dirs = test_dirs();
+        std::fs::write(&dirs.config, "[server]\nport = 8080\n").unwrap();
+        dope_core::init_dirs(dirs);
+
+        // Legacy config without `intercept` behaves as "configured".
+        assert_eq!(dope_core::load_config().intercept_mode(), "configured");
+
+        let mut body = HashMap::new();
+        body.insert("value".to_string(), "none".to_string());
+        let _ = update_server_intercept(axum::Form(body)).await;
+
+        let config = dope_core::load_config();
+        assert_eq!(config.server.intercept.as_deref(), Some("none"));
+        assert_eq!(config.intercept_mode(), "none");
+
+        let mut body = HashMap::new();
+        body.insert(
+            "value".to_string(),
+            "www.amazon.it, amazon.it\nmedia-amazon.com".to_string(),
+        );
+        let _ = update_server_passthrough(axum::Form(body)).await;
+
+        let config = dope_core::load_config();
+        assert_eq!(
+            config.server.passthrough,
+            Some(vec![
+                "amazon.it".to_string(),
+                "media-amazon.com".to_string(),
+                "www.amazon.it".to_string(),
+            ])
+        );
+        assert!(!config.should_intercept("amazon.it"));
+    }
 }

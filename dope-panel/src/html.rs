@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dope_core::{Config, LogEntry, RequestModifier, ResponseModifier, ScriptRule};
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 
 static TEMPLATES: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
@@ -69,13 +69,19 @@ pub fn log_rows(entries: &[LogEntry], search: Option<&str>) -> String {
     };
 
     if filtered.is_empty() {
-        return render(template("empty-state.html"), &[("message", "No matching entries.")]);
+        return render(
+            template("empty-state.html"),
+            &[("message", "No matching entries.")],
+        );
     }
 
     let groups = group_log_entries(&filtered);
 
     if groups.is_empty() {
-        return render(template("empty-state.html"), &[("message", "No matching entries.")]);
+        return render(
+            template("empty-state.html"),
+            &[("message", "No matching entries.")],
+        );
     }
 
     let rows: String = groups
@@ -255,9 +261,7 @@ fn combined_row(g: &LogGroup, show_expanded: bool) -> String {
             ));
         }
         if let Some(LogEntry::Error {
-            client_addr,
-            error,
-            ..
+            client_addr, error, ..
         }) = err
         {
             d.push_str(&format!(
@@ -325,6 +329,14 @@ fn urlencode(s: &str) -> String {
 /* --- Config Page ----------------------------------------------------------- */
 
 pub fn config_page(config: &Config) -> String {
+    let mode = config.intercept_mode();
+    let passthrough = config
+        .server
+        .passthrough
+        .as_ref()
+        .map(|hosts| hosts.join("\n"))
+        .unwrap_or_default();
+
     render(
         template("config-page.html"),
         &[
@@ -338,12 +350,25 @@ pub fn config_page(config: &Config) -> String {
                 },
             ),
             (
-                "log_enabled",
-                if config.log_enabled() {
-                    " checked"
+                "intercept_configured",
+                if mode == "configured" {
+                    " selected"
                 } else {
                     ""
                 },
+            ),
+            (
+                "intercept_all",
+                if mode == "all" { " selected" } else { "" },
+            ),
+            (
+                "intercept_none",
+                if mode == "none" { " selected" } else { "" },
+            ),
+            ("passthrough_text", &html_esc(&passthrough)),
+            (
+                "log_enabled",
+                if config.log_enabled() { " checked" } else { "" },
             ),
             ("log_max_size", &config.log_max_size().to_string()),
             ("domain_cards", &domain_list(config)),
@@ -381,7 +406,10 @@ fn all_domains(config: &Config) -> Vec<String> {
 pub fn domain_list(config: &Config) -> String {
     let domains = all_domains(config);
     if domains.is_empty() {
-        return render(template("empty-state.html"), &[("message", "No domain rules configured.")]);
+        return render(
+            template("empty-state.html"),
+            &[("message", "No domain rules configured.")],
+        );
     }
     domains
         .iter()
@@ -409,7 +437,8 @@ pub fn domain_card(config: &Config, domain: &str, expanded: bool) -> String {
 
     let summary = build_domain_summary(script, response, request);
 
-    let script_entries = build_script_entries(domain, script.map(|s| &s.scripts[..]).unwrap_or(&[]));
+    let script_entries =
+        build_script_entries(domain, script.map(|s| &s.scripts[..]).unwrap_or(&[]));
     let csp_opts = csp_options(response.and_then(|r| r.csp.as_deref()));
     let inject_opts = inject_options(response.and_then(|r| r.inject_at.as_deref()));
 
@@ -651,11 +680,7 @@ fn build_remove_headers_list(ty: &str, domain: &str, headers: Option<&[String]>)
     }
 }
 
-fn build_headers_list(
-    ty: &str,
-    domain: &str,
-    headers: Option<&HashMap<String, String>>,
-) -> String {
+fn build_headers_list(ty: &str, domain: &str, headers: Option<&HashMap<String, String>>) -> String {
     match headers {
         Some(hs) => hs
             .iter()
@@ -692,4 +717,43 @@ fn remove_header_row(ty: &str, domain: &str, hi: usize, val: &str) -> String {
             ("val", &html_esc(val)),
         ],
     )
+}
+
+/* --- Tests ----------------------------------------------------------------- */
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_page_renders_intercept_controls() {
+        let page = config_page(&Config::default());
+
+        assert!(page.contains("value=\"configured\" selected"));
+        assert!(!page.contains("{intercept_configured}"));
+        assert!(!page.contains("{passthrough_text}"));
+    }
+
+    #[test]
+    fn config_page_marks_active_mode_and_shows_passthrough() {
+        let mut config = Config::default();
+        config.server.intercept = Some("all".to_string());
+        config.server.passthrough = Some(vec!["amazon.it".to_string()]);
+
+        let page = config_page(&config);
+
+        assert!(page.contains("value=\"all\" selected"));
+        assert!(page.contains(">amazon.it</textarea>"));
+    }
+
+    #[test]
+    fn config_page_escapes_passthrough_hosts() {
+        let mut config = Config::default();
+        config.server.passthrough = Some(vec!["</textarea><script>".to_string()]);
+
+        let page = config_page(&config);
+
+        assert!(!page.contains("</textarea><script>"));
+        assert!(page.contains("&lt;/textarea&gt;"));
+    }
 }

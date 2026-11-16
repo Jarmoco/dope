@@ -3,8 +3,8 @@
  * Applies config-driven request and response modifiers (CSP, header add/remove).
  * -------------------------------------------------------------------------- */
 
-use hudsucker::hyper::http::HeaderName;
 use hudsucker::hyper::HeaderMap;
+use hudsucker::hyper::http::HeaderName;
 use tracing::*;
 
 use dope_core::{RequestModifier, ResponseModifier};
@@ -24,6 +24,9 @@ pub fn apply_response_modifiers(headers: &mut HeaderMap, config: &ResponseModifi
 
     if let Some(add) = &config.add_headers {
         for (name, value) in add {
+            if name.trim().is_empty() || value.trim().is_empty() {
+                continue;
+            }
             let header_name: HeaderName = match name.parse() {
                 Ok(n) => n,
                 Err(e) => {
@@ -54,6 +57,9 @@ pub fn apply_request_modifiers(headers: &mut HeaderMap, config: &RequestModifier
 
     if let Some(add) = &config.add_headers {
         for (name, value) in add {
+            if name.trim().is_empty() || value.trim().is_empty() {
+                continue;
+            }
             let header_name: HeaderName = match name.parse() {
                 Ok(n) => n,
                 Err(e) => {

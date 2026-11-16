@@ -84,6 +84,33 @@ Inside the config file, you can define:
 
 See the inline comments in the generated config file for details.
 
+### Interception model
+
+DOPE uses an allowlist by default: it only terminates TLS for domains that have at least one
+active rule. Every other HTTPS connection is passed through as a raw TCP tunnel, so the
+browser's own TLS fingerprint, HTTP/2 support and certificates are preserved.
+
+```toml
+[server]
+port = 8080
+
+# "configured" (default) — only intercept hosts with an active rule
+# "all"                  — intercept every HTTPS host (old behaviour)
+# "none"                 — tunnel everything
+intercept = "configured"
+
+# Hosts that are never intercepted. A bare domain also covers its subdomains.
+passthrough = ["amazon.it"]
+```
+
+Rule matching is explicit:
+- `domain = "example.com"` matches only `example.com`
+- `domain = "*.example.com"` matches subdomains, not the apex
+- `domain = "*"` matches everything
+
+`passthrough` and `intercept` can be changed from the web panel; they apply to new
+connections without restarting the proxy.
+
 ## GM\* Functions
 
 The proxy automatically injects a Greasemonkey API polyfill when userscripts with `GM_` calls are detected. This allows userscripts to use functions like `GM_getValue`, `GM_setValue`, `GM_listValues`, `GM_deleteValue`, and `GM_xmlhttpRequest`.

@@ -16,10 +16,7 @@ pub fn inject_scripts(html: &mut String, domain: &str, config: &Config) {
         return;
     }
 
-    let inject_at = config
-        .get_response_modifiers(domain)
-        .and_then(|m| m.inject_at.as_deref())
-        .unwrap_or("body_end");
+    let inject_at = config.get_inject_at(domain).unwrap_or("body_end");
 
     for script_name in scripts {
         info!("Injecting script: {} into {}", script_name, domain);

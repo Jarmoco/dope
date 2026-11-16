@@ -326,7 +326,8 @@ pre {
 }
 
 .config-row input,
-.config-row select {
+.config-row select,
+.config-row textarea {
   padding: 5px 8px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
@@ -337,13 +338,26 @@ pre {
   color: var(--color-text-main);
 }
 
+.config-row textarea {
+  font-family: inherit;
+  resize: vertical;
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin: 4px 0 10px;
+  flex-basis: 100%;
+}
+
 .config-row input[type="checkbox"] {
   min-width: auto;
   flex: 0;
 }
 
 .config-row input:focus,
-.config-row select:focus {
+.config-row select:focus,
+.config-row textarea:focus {
   outline: none;
   border-color: var(--color-border-focus);
 }

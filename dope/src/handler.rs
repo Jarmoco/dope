@@ -4,17 +4,16 @@
  * dispatches to script injectors and response/request modifiers.
  * -------------------------------------------------------------------------- */
 
-use http_body_util::BodyDataStream;
 use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZlibDecoder, ZstdDecoder};
+use http_body_util::BodyDataStream;
 use tokio::io::AsyncReadExt;
 use tokio_util::io::StreamReader;
 
 use hudsucker::{
-    Body, HttpContext,
+    Body, HttpContext, HttpHandler, RequestOrResponse, WebSocketContext, WebSocketHandler,
     futures::TryStreamExt,
     hyper::{Method, Request, Response, StatusCode, header},
     tokio_tungstenite::tungstenite::Message,
-    HttpHandler, RequestOrResponse, WebSocketContext, WebSocketHandler,
 };
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
@@ -103,7 +102,10 @@ impl HttpHandler for TrafficHandler {
             .unwrap()
             .entry(ctx.client_addr)
             .or_default()
-            .push_back(PendingRequest { url: full_uri, req_id });
+            .push_back(PendingRequest {
+                url: full_uri,
+                req_id,
+            });
 
         if is_websocket_upgrade(&req) {
             req.headers_mut().remove("sec-websocket-extensions");
@@ -111,19 +113,32 @@ impl HttpHandler for TrafficHandler {
         }
 
         let cfg = dope_core::load_config();
-        if let Some(modifier_config) = cfg.get_request_modifiers(&host) {
+        if !cfg.server.pause.unwrap_or(false)
+            && let Some(modifier_config) = cfg.get_request_modifiers(&host)
+        {
             modify::apply_request_modifiers(req.headers_mut(), modifier_config);
         }
 
         req.into()
     }
 
+    /// Only MITM hosts that the config asks for. Everything else is tunneled
+    /// untouched, preserving the browser's TLS fingerprint and HTTP/2.
+    async fn should_intercept(&mut self, _ctx: &HttpContext, req: &Request<Body>) -> bool {
+        match req.uri().authority().map(|authority| authority.host()) {
+            Some(host) => {
+                let intercept = dope_core::load_config().should_intercept(host);
+                if !intercept {
+                    debug!("Passthrough: {} (no MITM)", host);
+                }
+                intercept
+            }
+            None => true,
+        }
+    }
+
     /* --- Response Handler -------------------------------------------------- */
-    async fn handle_response(
-        &mut self,
-        ctx: &HttpContext,
-        res: Response<Body>,
-    ) -> Response<Body> {
+    async fn handle_response(&mut self, ctx: &HttpContext, res: Response<Body>) -> Response<Body> {
         let (req_id, full_url) = self
             .pending_urls
             .lock()
@@ -133,6 +148,7 @@ impl HttpHandler for TrafficHandler {
             .map_or(("-".to_string(), String::new()), |p| (p.req_id, p.url));
 
         let domain = extract_domain(&full_url);
+        let cfg = dope_core::load_config();
 
         let is_html = res
             .headers()
@@ -140,6 +156,17 @@ impl HttpHandler for TrafficHandler {
             .is_some_and(|v| v.to_str().unwrap_or("").contains("text/html"));
 
         if !is_html {
+            logging::log_response(&req_id, res.status(), res.headers(), "");
+            return res;
+        }
+
+        if cfg.server.pause.unwrap_or(false) {
+            info!("Paused — forwarding {} untouched", domain);
+            logging::log_response(&req_id, res.status(), res.headers(), "");
+            return res;
+        }
+
+        if !cfg.has_scripts_for(&domain) && cfg.get_response_modifiers(&domain).is_none() {
             logging::log_response(&req_id, res.status(), res.headers(), "");
             return res;
         }
@@ -203,17 +230,11 @@ impl HttpHandler for TrafficHandler {
         info!("Response for URL: {} → domain: {}", full_url, domain);
 
         if !domain.is_empty() {
-            let cfg = dope_core::load_config();
-
-            if cfg.server.pause.unwrap_or(false) {
-                info!("Paused — skipping injection and manipulation for {}", domain);
-            } else {
-                if let Some(response_modifier) = cfg.get_response_modifiers(&domain) {
-                    modify::apply_response_modifiers(&mut parts.headers, response_modifier);
-                }
-
-                inject::inject_scripts(&mut html, &domain, &cfg);
+            if let Some(response_modifier) = cfg.get_response_modifiers(&domain) {
+                modify::apply_response_modifiers(&mut parts.headers, response_modifier);
             }
+
+            inject::inject_scripts(&mut html, &domain, &cfg);
         }
 
         /* --- Finalize ------------------------------------------------------ */
@@ -265,11 +286,7 @@ impl HttpHandler for TrafficHandler {
 /* --- WebSocket Handler ----------------------------------------------------- */
 
 impl WebSocketHandler for TrafficHandler {
-    async fn handle_message(
-        &mut self,
-        _ctx: &WebSocketContext,
-        msg: Message,
-    ) -> Option<Message> {
+    async fn handle_message(&mut self, _ctx: &WebSocketContext, msg: Message) -> Option<Message> {
         Some(msg)
     }
 }

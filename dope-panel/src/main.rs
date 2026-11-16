@@ -8,11 +8,11 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use axum::{
+    Json, Router,
     extract::Query,
-    http::{header, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::{Html, IntoResponse, Response},
     routing::{delete, get, post, put},
-    Json, Router,
 };
 use dope_core::{Config, LogEntry};
 use serde::Deserialize;
@@ -77,8 +77,7 @@ async fn main() {
 
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -106,6 +105,14 @@ async fn main() {
             "/api/html/config/server/pause",
             put(config_routes::update_server_pause),
         )
+        .route(
+            "/api/html/config/server/intercept",
+            put(config_routes::update_server_intercept),
+        )
+        .route(
+            "/api/html/config/server/passthrough",
+            put(config_routes::update_server_passthrough),
+        )
         // Log config
         .route(
             "/api/html/config/log/enabled",
@@ -116,10 +123,7 @@ async fn main() {
             put(config_routes::update_log_max_size),
         )
         // Domain CRUD
-        .route(
-            "/api/html/config/domain",
-            post(config_routes::add_domain),
-        )
+        .route("/api/html/config/domain", post(config_routes::add_domain))
         .route(
             "/api/html/config/domain/:domain",
             delete(config_routes::remove_domain),
@@ -207,16 +211,18 @@ async fn main() {
         .await
         .expect("Failed to bind to port 9090");
 
-    axum::serve(listener, app)
-        .await
-        .expect("Server failed");
+    axum::serve(listener, app).await.expect("Server failed");
 }
 
 /* --- Helpers --------------------------------------------------------------- */
 
 fn page_or_fragment(headers: &HeaderMap, content: String) -> Response {
     if headers.contains_key("hx-request") {
-        ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], content).into_response()
+        (
+            [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            content,
+        )
+            .into_response()
     } else {
         let full = html::page_shell(&content);
         ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], full).into_response()
@@ -283,16 +289,7 @@ async fn serve_logs(headers: HeaderMap) -> Response {
 async fn serve_config(headers: HeaderMap) -> Response {
     let config = tokio::task::spawn_blocking(dope_core::load_config)
         .await
-        .unwrap_or_else(|_| Config {
-            server: dope_core::ServerConfig {
-                port: 8080,
-                pause: None,
-            },
-            log: None,
-            scripts: None,
-            modify_response: None,
-            modify_request: None,
-        });
+        .unwrap_or_else(|_| Config::default());
     let content = html::config_page(&config);
     page_or_fragment(&headers, content)
 }
@@ -331,16 +328,7 @@ struct LogQuery {
 async fn get_config() -> Json<Config> {
     let cfg = tokio::task::spawn_blocking(dope_core::load_config)
         .await
-        .unwrap_or_else(|_| Config {
-            server: dope_core::ServerConfig {
-                port: 8080,
-                pause: None,
-            },
-            log: None,
-            scripts: None,
-            modify_response: None,
-            modify_request: None,
-        });
+        .unwrap_or_else(|_| Config::default());
     Json(cfg)
 }
 
